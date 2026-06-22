@@ -18,7 +18,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
-from ..models import AppliedEffect, CapabilityKind, CapabilitySpec, TransformStep
+from ..models import AppliedEffect, CallAttribution, CapabilityKind, CapabilitySpec, TransformStep
 from ..platform.base import PlatformError
 
 # ── whitelisted pure transforms ─────────────────────────────────────────────
@@ -56,9 +56,19 @@ class ExecutionContext:
     journal: list[AppliedEffect] = field(default_factory=list)
     dry_run: bool = False             # when True, side-effecting ops are validated, not executed
     probe_marker: str = "[PRAXIS-PROBE]"
+    # run-scoped accounting consumed by the learner / report
+    attributions: list[CallAttribution] = field(default_factory=list)
+    wasted_calls: int = 0
+    observations: list[dict] = field(default_factory=list)  # raw learnable failures for the learner
 
     def record_effect(self, effect: AppliedEffect) -> None:
         self.journal.append(effect)
+
+    def note_saving(self, attribution: CallAttribution) -> None:
+        self.attributions.append(attribution)
+
+    def observe_failure(self, obs: dict) -> None:
+        self.observations.append(obs)
 
     def resolve(self, value: Any, scope: dict[str, Any]) -> Any:
         """Resolve {{path}} templates in strings (and recursively in dicts/lists)."""

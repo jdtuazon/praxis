@@ -17,12 +17,14 @@ from .store import MemoryStore
 
 
 class ReusablePlan:
-    def __init__(self, plan: Plan, execution_id: int, success_count: int, avg_api_calls: float, similarity: float):
+    def __init__(self, plan: Plan, execution_id: int, success_count: int, avg_api_calls: float,
+                 similarity: float, origin_instruction: str):
         self.plan = plan
         self.execution_id = execution_id
         self.success_count = success_count
         self.avg_api_calls = avg_api_calls
         self.similarity = similarity
+        self.origin_instruction = origin_instruction
 
 
 class ExecutionMemory:
@@ -46,10 +48,11 @@ class ExecutionMemory:
         src = self.store.one(
             "SELECT instruction FROM executions WHERE id = ?", (row["execution_id"],)
         )
-        sim = cosine_similarity(instruction, src["instruction"]) if src else 1.0
+        origin = src["instruction"] if src else instruction
+        sim = cosine_similarity(instruction, origin)
         if sim < min_similarity:
             return None
-        return ReusablePlan(plan, row["execution_id"], row["success_count"], row["avg_api_calls"], sim)
+        return ReusablePlan(plan, row["execution_id"], row["success_count"], row["avg_api_calls"], sim, origin)
 
     def similar_instructions(self, instruction: str, limit: int = 5) -> list[tuple[str, str]]:
         rows = self.store.query("SELECT DISTINCT instruction, signature FROM executions")
@@ -109,8 +112,17 @@ class ExecutionMemory:
         return exec_id
 
     def _upsert_plan_cache(self, signature: str, plan: Plan, execution_id: int, api_calls: int) -> None:
-        # Persist the shape with a stable, reusable source tag.
+        # Persist the BASE shape only: steps inserted by a learned constraint are
+        # stripped so the rewrite is re-derived live from current memory each run.
+        # (This keeps the learned constraint the sole cause of the decision change,
+        # so a constraint-only wipe genuinely reverts behaviour — a clean control.)
         shape = plan.model_copy(deep=True)
+        removed = {s.index for s in shape.steps if s.inserted_by_constraint}
+        if removed:
+            base_steps = [s for s in shape.steps if not s.inserted_by_constraint]
+            for s in base_steps:
+                s.depends_on = [d for d in s.depends_on if d not in removed]
+            shape.steps = base_steps
         shape.source = PlanSource.REUSED
         shape.reused_from_execution_id = execution_id
         existing = self.store.one("SELECT * FROM plan_cache WHERE signature = ?", (signature,))

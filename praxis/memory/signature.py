@@ -79,6 +79,10 @@ def compute_signature(instruction: str) -> str:
     text = " " + instruction.lower().strip() + " "
 
     verb = _earliest(text, _VERBS) or "act"
+    # Aggregation dominates: "create a digest grouped by X" is an aggregation,
+    # not a create, regardless of which verb word appears first.
+    if any(n in text for n in _VERBS[0][1]):
+        verb = "aggregate"
     entity = _earliest(text, _ENTITIES) or "issue"
     predicates = sorted(set(_match_all(text, _PREDICATES)))
     # Mutation-field tags only matter for write verbs; queries/aggregations are

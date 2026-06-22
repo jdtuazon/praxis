@@ -106,6 +106,13 @@ def get_issue(ctx: ExecutionContext, *, id: str, **_) -> Optional[dict]:
     return ctx.client.execute(q, {"id": id})["issue"]
 
 
+def find_issue(ctx: ExecutionContext, *, identifier: str, **_) -> dict:
+    for issue in query_issues(ctx, filter={"includeArchived": True}):
+        if issue["identifier"].lower() == identifier.lower():
+            return issue
+    raise PlatformError(f"No issue with identifier '{identifier}'", code="ENTITY_NOT_FOUND")
+
+
 # ── write primitives ─────────────────────────────────────────────────────────
 def create_issue(ctx: ExecutionContext, **a) -> dict:
     _required(a, "teamId", "title")
@@ -218,6 +225,7 @@ BUILTINS: list[tuple[CapabilitySpec, Any]] = [
     (_spec("viewer", "Get the authenticated user (resolves 'me').", {}), viewer),
     (_spec("query_issues", "Query issues with an optional filter.", {"filter": "IssueFilter?"}), query_issues),
     (_spec("get_issue", "Fetch a single issue by id.", {"id": "string"}), get_issue),
+    (_spec("find_issue", "Resolve an issue by its identifier (e.g. ENG-3).", {"identifier": "string"}), find_issue),
     (_spec("create_issue", "Create an issue.",
            {"teamId": "string", "title": "string", "description": "string?", "priority": "int?",
             "estimate": "int?", "stateId": "string?", "assigneeId": "string?", "labelIds": "list?"},
