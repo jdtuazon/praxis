@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     llm_provider: Literal["anthropic", "openai", "scripted"] = Field(
         default="anthropic", alias="PRAXIS_LLM_PROVIDER"
     )
+    # Reasoning model drives planning + synthesis (quality matters most here).
     llm_model: str = Field(default="claude-sonnet-4-6", alias="PRAXIS_LLM_MODEL")
     anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
@@ -35,11 +36,19 @@ class Settings(BaseSettings):
 
     # ── Synthesis ───────────────────────────────────────────────────────────────
     synthesis_max_attempts: int = Field(default=3, alias="PRAXIS_SYNTHESIS_MAX_ATTEMPTS")
+    # A synthesized capability is promoted candidate→trusted after this many
+    # successful real executions.
+    capability_promote_after: int = Field(default=2, alias="PRAXIS_CAPABILITY_PROMOTE_AFTER")
 
     # ── Safety ──────────────────────────────────────────────────────────────────
+    # If true, side-effecting capabilities may be validated with a real
+    # create-canary-then-inverse-op probe (in a sandbox team, with [PRAXIS-PROBE]
+    # markers). If false, the synthesizer stops at non-destructive test tiers.
     require_rollback_journal: bool = Field(
         default=True, alias="PRAXIS_REQUIRE_ROLLBACK_JOURNAL"
     )
+    # Team used for destructive synthesis canaries (keeps probes out of real teams).
+    sandbox_team_key: Optional[str] = Field(default=None, alias="PRAXIS_SANDBOX_TEAM_KEY")
 
     def memory_file(self) -> Path:
         p = Path(self.memory_path)

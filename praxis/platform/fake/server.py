@@ -75,6 +75,7 @@ type Issue {
   description: String
   priority: Int!
   priorityLabel: String!
+  estimate: Int
   url: String!
   archivedAt: String
   createdAt: String!
@@ -99,6 +100,7 @@ input IssueCreateInput {
   title: String!
   description: String
   priority: Int
+  estimate: Int
   stateId: ID
   assigneeId: ID
   labelIds: [ID!]
@@ -107,6 +109,7 @@ input IssueUpdateInput {
   title: String
   description: String
   priority: Int
+  estimate: Int
   stateId: ID
   assigneeId: ID
   labelIds: [ID!]
@@ -147,6 +150,7 @@ class FakeLinear:
         *,
         rate_limit_after: Optional[int] = None,
         forbid_delete: bool = True,
+        require_estimate_to_complete: Optional[set[str]] = None,
     ) -> None:
         self._schema = build_schema(SDL)
         self.store = seed()
@@ -155,9 +159,16 @@ class FakeLinear:
         # ── simulated constraints / faults ─────────────────────────────────
         self.rate_limit_after = rate_limit_after  # raise RATELIMITED after N writes
         self.forbid_delete = forbid_delete         # issueDelete → FORBIDDEN
+        # Workspace policy NOT derivable from the schema: these teams require an
+        # estimate before an issue may transition into a completed state. This is
+        # the runtime-learned rule that makes the agent *rewrite its plan*.
+        self.require_estimate_to_complete = (
+            require_estimate_to_complete if require_estimate_to_complete is not None else {"team_eng"}
+        )
         # ── observability for tests ────────────────────────────────────────
         self.calls = 0                              # total GraphQL documents executed
         self.op_counts: dict[str, int] = {}         # per-mutation invocation counts
+        self.side_effect_log: list[str] = []        # notifications/webhooks that would fire (irreversible)
         self._writes = 0
 
     # ── public transport API ───────────────────────────────────────────────
@@ -253,6 +264,7 @@ class FakeLinear:
             "description": i.get("description"),
             "priority": i.get("priority", 0),
             "priorityLabel": PRIORITY_LABELS.get(i.get("priority", 0), "No priority"),
+            "estimate": i.get("estimate"),
             "url": f"https://linear.app/acme/issue/{i['identifier']}",
             "archivedAt": i.get("archivedAt"),
             "createdAt": i.get("createdAt", "2026-06-01T00:00:00.000Z"),
@@ -388,6 +400,7 @@ class FakeLinear:
             "title": input["title"],
             "description": input.get("description"),
             "priority": input.get("priority", 0) or 0,
+            "estimate": input.get("estimate"),
             "teamId": team["id"],
             "stateId": state_id,
             "assigneeId": input.get("assigneeId"),
@@ -396,6 +409,8 @@ class FakeLinear:
             "createdAt": self._now(),
         }
         self.store["issues"].append(issue)
+        # Creating an issue notifies subscribers — an irreversible side effect.
+        self.side_effect_log.append(f"notification: issue {issue['identifier']} created")
         return {"success": True, "issue": self._issue_view(issue)}
 
     def _m_issue_update(self, info, id, input):
@@ -404,8 +419,29 @@ class FakeLinear:
         if not issue:
             raise _err(f"Issue '{id}' not found.", "ENTITY_NOT_FOUND", field="id")
         self._validate_issue_input(input, creating=False)
+        # Workspace workflow policy: completing an issue in a team that requires
+        # estimates is rejected unless the issue has (or is being given) one.
+        target_state_id = input.get("stateId")
+        if target_state_id:
+            target = self._state(target_state_id)
+            new_estimate = input.get("estimate", issue.get("estimate"))
+            if (
+                target
+                and target["type"] == "completed"
+                and issue["teamId"] in self.require_estimate_to_complete
+                and new_estimate is None
+            ):
+                team = self._team(issue["teamId"])
+                raise _err(
+                    f"Issues in team {team['name']} must have an estimate before they can be completed.",
+                    "WORKFLOW_RULE",
+                    field="estimate",
+                    requires="estimate",
+                    before_state_type="completed",
+                    team=issue["teamId"],
+                )
         self._bump_write()
-        for k in ("title", "description", "priority", "stateId", "assigneeId"):
+        for k in ("title", "description", "priority", "estimate", "stateId", "assigneeId"):
             if k in input and input[k] is not None:
                 issue[k] = input[k]
         if input.get("labelIds") is not None:
@@ -460,6 +496,8 @@ class FakeLinear:
             "createdAt": self._now(),
         }
         self.store["comments"].append(comment)
+        # Posting a comment notifies watchers — irreversible once sent.
+        self.side_effect_log.append(f"notification: comment on {issue['identifier']}")
         return {"success": True, "comment": self._comment_view(comment)}
 
     def _m_project_create(self, info, input):
