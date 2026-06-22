@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "praxis-agent"
+version = "0.1.0"
+description = "Praxis — an autonomous, self-improving platform agent for Linear that learns by doing."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Joseph D. Tuazon" }]
+keywords = ["agent", "llm", "linear", "langgraph", "self-improving", "memory", "capability-synthesis"]
+
+dependencies = [
+    # Orchestration spine — deterministic, checkpointable multi-agent state graph.
+    "langgraph>=1.2",
+    "langchain-core>=1.0",
+    # LLM providers (pluggable). Anthropic is the default; OpenAI optional.
+    "anthropic>=0.40",
+    "openai>=1.40",
+    # Async HTTP to Linear's GraphQL API; ASGI transport injection powers offline tests.
+    "httpx>=0.27",
+    # Typed models for plans, capabilities, reports, and config.
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "python-dotenv>=1.0",
+    # Operator-grade CLI rendering (execution reports, memory diffs, learning curves).
+    "rich>=13.7",
+    "typer>=0.12",
+    # Real GraphQL schema + introspection + execution for the offline FakeLinear server.
+    "graphql-core>=3.2",
+    # Backoff/retry honoring discovered rate limits.
+    "tenacity>=8.3",
+    # Dashboard API + live execution stream.
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+praxis = "praxis.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["praxis*"]
+
+[tool.setuptools.package-data]
+praxis = ["server/static/*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.praxis]
+# Marker so tooling can detect a Praxis project root.
