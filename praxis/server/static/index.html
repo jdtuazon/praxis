@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Praxis — autonomous Linear agent</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --border:#2a3340; --text:#e6edf3;
+    --muted:#8b949e; --green:#3fb950; --red:#f85149; --yellow:#d29922; --magenta:#bc8cff;
+    --cyan:#39c5cf; --accent:#58a6ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:14px 22px;border-bottom:1px solid var(--border);background:var(--panel)}
+  header h1{font-size:18px;margin:0;letter-spacing:.5px}
+  header .sub{color:var(--muted);font-size:13px}
+  .badge{margin-left:auto;font-size:12px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);color:var(--cyan)}
+  .wrap{display:grid;grid-template-columns:330px 1fr;gap:18px;padding:18px;max-width:1400px;margin:0 auto}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px}
+  .panel h2{font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:0 0 12px}
+  textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font:14px inherit;resize:vertical;min-height:64px}
+  button{background:var(--accent);color:#0b0f14;border:0;border-radius:8px;padding:9px 14px;font-weight:600;cursor:pointer;font-size:13px}
+  button:hover{filter:brightness(1.08)}
+  button.ghost{background:transparent;color:var(--text);border:1px solid var(--border);font-weight:500}
+  button:disabled{opacity:.5;cursor:wait}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .chips button{display:block;width:100%;text-align:left;margin-bottom:6px;background:var(--panel2);color:var(--text);border:1px solid var(--border);font-weight:500}
+  .status{display:inline-block;font-weight:700;padding:2px 10px;border-radius:6px;font-size:12px}
+  .s-success{background:rgba(63,185,80,.15);color:var(--green)}
+  .s-partial{background:rgba(210,153,34,.15);color:var(--yellow)}
+  .s-failed{background:rgba(248,81,73,.15);color:var(--red)}
+  .s-rolled_back{background:rgba(188,140,255,.15);color:var(--magenta)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:12px}
+  .glyph{font-weight:700;width:18px}
+  .g-success{color:var(--green)}.g-failed{color:var(--red)}.g-skipped{color:var(--yellow)}.g-rolled_back{color:var(--magenta)}
+  .tag{font-size:11px;padding:1px 7px;border-radius:10px;border:1px solid var(--border);color:var(--muted)}
+  .tag.new{color:var(--green);border-color:var(--green)}
+  .tag.builtin{color:var(--muted)} .tag.synthesized{color:var(--cyan);border-color:var(--cyan)}
+  .kvs{color:var(--muted);font-size:12px}
+  .attr{color:var(--green);font-size:12px;margin:2px 0}
+  .muted{color:var(--muted)} .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+  .delta{font-weight:700}
+  .bigrow{display:flex;gap:16px;flex-wrap:wrap}
+  .metric{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-width:90px}
+  .metric .n{font-size:22px;font-weight:700}.metric .l{font-size:11px;color:var(--muted);text-transform:uppercase}
+  pre{white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12px;overflow:auto;max-height:280px}
+  .pill{font-size:11px;color:var(--cyan)}
+  .empty{color:var(--muted);font-style:italic}
+  .benchtable td.good{color:var(--green);font-weight:700}.benchtable td.bad{color:var(--red);font-weight:700}
+</style>
+</head>
+<body>
+<header>
+  <h1>🍉 Praxis</h1>
+  <span class="sub">autonomous, self-improving agent for Linear</span>
+  <span class="badge" id="mode">offline</span>
+</header>
+
+<div class="wrap">
+  <!-- ── controls + memory ── -->
+  <div>
+    <div class="panel">
+      <h2>Instruct the agent</h2>
+      <textarea id="instruction" placeholder="e.g. Roll up all issues into a triage digest grouped by priority"></textarea>
+      <div class="row"><button id="runBtn" onclick="run()">Run ▸</button>
+        <button class="ghost" onclick="loadMemory()">Refresh memory</button></div>
+      <div class="chips" style="margin-top:14px">
+        <div class="muted" style="font-size:12px;margin-bottom:6px">Demo sequence (run in order):</div>
+        <button onclick="pick(this)">Roll up all issues into a triage digest grouped by priority</button>
+        <button onclick="pick(this)">Create a digest of issues grouped by assignee</button>
+        <button onclick="pick(this)">Move my in-progress issue to Done</button>
+        <button onclick="pick(this)">Mark my in-progress work as completed</button>
+        <button onclick="pick(this)">Triage ENG-3: move it to In Progress, comment 'Picked up for this sprint', and assign it to Dave</button>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="ghost" onclick="bench()">Run learning benchmark</button>
+        <button class="ghost" onclick="wipe()">Wipe constraints</button>
+        <button class="ghost" onclick="reset()">Reset memory</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Memory <span id="memcounts" class="muted" style="text-transform:none;font-weight:400"></span></h2>
+      <div id="capabilities"></div>
+      <div id="constraints" style="margin-top:14px"></div>
+    </div>
+  </div>
+
+  <!-- ── report ── -->
+  <div>
+    <div class="panel" id="reportPanel"><div class="empty">Run an instruction to see the structured execution report,
+      the capability synthesis trace, and the learning signal.</div></div>
+    <div class="panel" id="benchPanel" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+let prevCaps = new Set(), prevCons = new Set();
+
+async function api(path, body){
+  const opt = body ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)} : {};
+  const r = await fetch(path, opt); return r.json();
+}
+function pick(b){ document.getElementById('instruction').value = b.textContent; }
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+async function run(){
+  const ins = document.getElementById('instruction').value.trim();
+  if(!ins) return;
+  const btn = document.getElementById('runBtn'); btn.disabled=true; btn.textContent='Running…';
+  try{ const rep = await api('/api/run',{instruction:ins}); renderReport(rep); await loadMemory(); }
+  finally{ btn.disabled=false; btn.textContent='Run ▸'; }
+}
+
+function renderReport(r){
+  const L = r.learning;
+  const steps = r.steps.map(s=>`<tr>
+      <td class="glyph g-${s.status}">${glyph(s.status)}</td>
+      <td>${esc(s.intent)}${s.inserted_by_constraint?' <span class="pill">⟲ inserted by learned rule</span>':''}</td>
+      <td class="mono">${esc(s.capability||'—')}</td>
+      <td>${s.api_calls}${s.wasted_calls?` <span style="color:var(--red)">(${s.wasted_calls} wasted)</span>`:''}</td>
+      <td class="kvs">${esc(s.error||s.result_summary||'')}${s.provenance.map(p=>` <span class="pill">${p.kind}</span>`).join('')}</td>
+    </tr>`).join('');
+  const synth = (r.synthesis||[]).map(sy=>`
+    <div style="margin-top:10px">
+      <b style="color:${sy.success?'var(--green)':'var(--red)'}">${sy.success?'✓ registered':'✗ failed'}</b>
+      ${sy.capability_name?`<span class="mono">${esc(sy.capability_name)}</span>`:''}
+      <span class="muted">(${sy.api_calls} API, ${sy.llm_calls} LLM)</span>
+      <div class="kvs">gap: ${esc(sy.requested_for)}</div>
+      ${sy.attempts.map(a=>`<div class="kvs">attempt ${a.attempt}: ${a.outcomes.map(o=>`<span style="color:${o.passed?'var(--green)':'var(--red)'}">[${o.passed?'✓':'✗'} ${o.tier}]</span>`).join(' ')} ${a.error?`<span style="color:var(--red)">${esc(a.error)}</span>`:''}</div>`).join('')}
+    </div>`).join('');
+  const decisions = (r.decisions||[]).map(d=>`<div class="kvs">• <b style="color:var(--cyan)">[${d.stage}]</b> ${esc(d.summary)}<br><span class="muted" style="margin-left:14px">${esc(d.rationale)}</span></div>`).join('');
+  const rollback = (r.rollback_performed||r.manual_cleanup_required.length)?`
+    <h2 style="margin-top:16px">Rollback</h2>
+    ${r.rollback_steps.map(x=>`<div style="color:var(--magenta)">↩ compensated: ${esc(x)}</div>`).join('')}
+    ${r.manual_cleanup_required.map(x=>`<div style="color:var(--yellow)">⚠ manual cleanup: ${esc(x)}</div>`).join('')}`:'';
+  const learnDelta = L.baseline_api_calls!=null ? `
+      <div class="metric"><div class="n delta" style="color:var(--green)">${L.wasted_calls_saved? '−'+L.wasted_calls_saved : '0'}</div><div class="l">wasted saved</div></div>
+      <div class="metric"><div class="n delta" style="color:var(--green)">${L.api_calls_saved?'−'+L.api_calls_saved:'0'}</div><div class="l">API saved</div></div>` : '';
+
+  document.getElementById('reportPanel').innerHTML = `
+    <h2>Execution report</h2>
+    <div style="margin-bottom:10px"><span class="status s-${r.status}">${r.status.toUpperCase()}</span>
+      <span class="muted"> ${esc(r.summary)}</span></div>
+    <div class="bigrow" style="margin-bottom:14px">
+      <div class="metric"><div class="n">${r.total_api_calls}</div><div class="l">API calls</div></div>
+      <div class="metric"><div class="n" style="color:${r.wasted_calls?'var(--red)':'var(--green)'}">${r.wasted_calls}</div><div class="l">wasted</div></div>
+      <div class="metric"><div class="n">${r.total_llm_calls}</div><div class="l">LLM calls</div></div>
+      <div class="metric"><div class="n">${(r.confidence*100|0)}%</div><div class="l">confidence</div></div>
+      ${learnDelta}
+    </div>
+    <table><thead><tr><th></th><th>Sub-goal</th><th>Capability</th><th>API</th><th>Notes</th></tr></thead><tbody>${steps}</tbody></table>
+    ${synth?`<h2 style="margin-top:16px">Capability synthesis · reason → build → test → register</h2>${synth}`:''}
+    ${decisions?`<h2 style="margin-top:16px">Decisions</h2>${decisions}`:''}
+    ${rollback}
+    <h2 style="margin-top:16px">Learning signal · run #${L.run_number} of <span class="mono">${esc(L.instruction_signature)}</span> · mode ${L.mode}</h2>
+    ${L.attributions.length?L.attributions.map(a=>`<div class="attr">→ ${esc(a)}</div>`).join(''):'<div class="muted">first encounter — nothing to compare yet</div>'}
+    <h2 style="margin-top:16px">Memory Δ</h2>
+    <div class="kvs">${r.memory_diff.lines.map(esc).join(' · ')||'—'}</div>
+    ${r.discovered_constraints.length?'<div style="margin-top:6px">learned: '+r.discovered_constraints.map(c=>`<span class="tag new">${esc(c)}</span>`).join(' ')+'</div>':''}
+  `;
+}
+function glyph(s){return {success:'✓',failed:'✗',skipped:'⊘',rolled_back:'↩',pending:'·',running:'▸'}[s]||'·';}
+
+async function loadMemory(){
+  const m = await api('/api/memory');
+  document.getElementById('memcounts').textContent =
+    `· ${m.counts.executions} runs · ${m.counts.capabilities} caps · ${m.counts.constraints} constraints`;
+  const caps = m.capabilities.map(c=>{
+    const isNew = !prevCaps.has(c.name) && prevCaps.size>0;
+    return `<tr><td>${esc(c.name)} ${isNew?'<span class="tag new">new</span>':''}</td>
+      <td><span class="tag ${c.source}">${c.source}</span></td>
+      <td class="muted">${c.attempts} use${c.attempts==1?'':'s'}${c.success_rate!=null?` · ${(c.success_rate*100|0)}%`:''}</td></tr>`;}).join('');
+  document.getElementById('capabilities').innerHTML =
+    `<table><thead><tr><th>Capability (${m.capabilities.length})</th><th>source</th><th>health</th></tr></thead><tbody>${caps}</tbody></table>`;
+  const cons = m.constraints.length? m.constraints.map(c=>{
+    const k = c.scope+'/'+c.key, isNew=!prevCons.has(k)&&prevCons.size>0;
+    return `<tr><td>${esc(k)} ${isNew?'<span class="tag new">new</span>':''}${c.rewrites_plan?' <span class="pill">rewrites plan</span>':''}</td>
+      <td class="muted">${esc(c.kind)}/${esc(c.origin)}</td><td class="muted">${c.hits} hit${c.hits==1?'':'s'}</td></tr>`;}).join('')
+    : '<tr><td class="empty" colspan="3">none learned yet</td></tr>';
+  document.getElementById('constraints').innerHTML =
+    `<table><thead><tr><th>Learned constraint</th><th>kind/origin</th><th></th></tr></thead><tbody>${cons}</tbody></table>`;
+  prevCaps = new Set(m.capabilities.map(c=>c.name));
+  prevCons = new Set(m.constraints.map(c=>c.scope+'/'+c.key));
+}
+
+async function bench(){
+  const p = document.getElementById('benchPanel'); p.style.display='block';
+  p.innerHTML = '<h2>Learning benchmark</h2><div class="muted">running…</div>';
+  const d = await api('/api/bench');
+  const A = d.workflow_rule, B = d.synthesis_transfer;
+  const rowsA = [['run 1 · cold (rule unknown)',A.cold],['run 2 · warm (rule learned → plan rewritten)',A.warm],['run 3 · control (constraints wiped)',A.control_after_wipe]];
+  const rowsB = [['run 1 · cold (capability synthesized)',B.cold],['run 2 · transfer (capability reused)',B.transfer]];
+  const t = (title,rows,hl)=>`<h2 style="margin-top:14px">${title}</h2>
+    <table class="benchtable"><thead><tr><th>scenario</th><th>status</th><th>API</th><th>wasted</th><th>LLM</th><th>synth</th></tr></thead><tbody>
+    ${rows.map(([l,r])=>`<tr><td>${l}</td><td>${r.status}</td><td>${r.api_calls}</td>
+      <td class="${hl=='wasted'?(r.wasted_calls?'bad':'good'):''}">${r.wasted_calls}</td>
+      <td>${r.llm_calls}</td><td>${r.synthesized}</td></tr>`).join('')}</tbody></table>`;
+  p.innerHTML = `<h2>Learning benchmark — auditable before/after</h2>
+    ${t('A · learned workflow rule rewrites the plan (failure avoidance)',rowsA,'wasted')}
+    <div class="muted" style="font-size:12px;margin-top:6px">The wasted call vanishes once the rule is learned and returns when the constraint is wiped — the change is caused by memory, not luck.</div>
+    ${t('B · runtime synthesis, then transfer',rowsB,'api')}`;
+}
+async function wipe(){ await api('/api/wipe-constraints',{}); await loadMemory(); }
+async function reset(){ await api('/api/reset',{}); prevCaps=new Set();prevCons=new Set(); await loadMemory();
+  document.getElementById('reportPanel').innerHTML='<div class="empty">Memory reset. Run an instruction to begin.</div>'; }
+
+loadMemory();
+</script>
+</body>
+</html>
