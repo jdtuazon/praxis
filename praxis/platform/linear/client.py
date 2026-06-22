@@ -51,6 +51,8 @@ class LinearClient:
         self._t = transport
         self.api_calls = 0
         self._sdl_cache: Optional[str] = None
+        self._schema_obj = None
+        self._schema_hash: Optional[str] = None
 
     def reset_counter(self) -> None:
         self.api_calls = 0
@@ -79,6 +81,37 @@ class LinearClient:
         sdl = print_schema(schema)
         self._sdl_cache = sdl
         return sdl
+
+    def graphql_schema(self):
+        """Return the built GraphQLSchema object (cached) for programmatic validation."""
+        if self._schema_obj is None:
+            data = self.execute(get_introspection_query(descriptions=False))
+            self._schema_obj = build_client_schema(data)
+        return self._schema_obj
+
+    def schema_hash(self) -> str:
+        """A stable hash of the root field signatures — provenance for synthesized caps."""
+        if self._schema_hash is None:
+            import hashlib
+
+            schema = self.graphql_schema()
+            sig_parts: list[str] = []
+            for root in (schema.query_type, schema.mutation_type):
+                if not root:
+                    continue
+                for fname, field in sorted(root.fields.items()):
+                    args = ",".join(sorted(field.args))
+                    sig_parts.append(f"{fname}({args}):{field.type}")
+            self._schema_hash = hashlib.sha256("\n".join(sig_parts).encode()).hexdigest()[:16]
+        return self._schema_hash
+
+    def root_field(self, operation_type: str, name: str):
+        """Return the GraphQLField for a Query/Mutation root field, or None."""
+        schema = self.graphql_schema()
+        root = schema.query_type if operation_type == "query" else schema.mutation_type
+        if not root:
+            return None
+        return root.fields.get(name)
 
     def schema_digest(self, keywords: list[str], *, max_types: int = 18) -> str:
         """A focused slice of the schema for the synthesizer.

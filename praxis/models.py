@@ -162,16 +162,20 @@ class CapabilityPlan(BaseModel):
     name: str
     kind: CapabilityKind
     description: str = ""
-    # GRAPHQL kind:
+    # GRAPHQL kind (built from a contract — we assemble the document, the model
+    # never writes raw GraphQL, so there is no syntax-error surface):
     graphql_root_field: Optional[str] = None  # e.g. "issueArchive"
     operation_type: Optional[str] = None       # "query" | "mutation"
     args: dict[str, str] = Field(default_factory=dict)  # arg_name -> graphql type (e.g. "id": "ID!")
+    selection: str = Field(default="", description="Selection set body, e.g. 'success issue { id identifier }'.")
     select_path: Optional[str] = None
     side_effecting: bool = False
     inverse_root_field: Optional[str] = None    # e.g. "issueUnarchive" for rollback
     # COMPOSITE kind:
     composition: list[TransformStep] = Field(default_factory=list)
     input_schema: dict[str, Any] = Field(default_factory=dict)
+    # Sample args used by the test gate to exercise the capability safely.
+    probe_args: dict[str, Any] = Field(default_factory=dict)
     rationale: str = ""
 
 
