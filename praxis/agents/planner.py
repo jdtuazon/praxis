@@ -87,8 +87,21 @@ class Planner:
         return plan, decisions
 
     # ── fresh decomposition ────────────────────────────────────────────────
+    def _capability_catalog(self, available_caps: list[str]) -> str:
+        """Render name(args) — description for each capability so the LLM binds args correctly."""
+        specs = {s.name: s for s in self.memory.capability.list_capabilities()}
+        lines = []
+        for name in available_caps:
+            spec = specs.get(name)
+            if spec:
+                args = ", ".join(spec.input_schema) if spec.input_schema else ""
+                lines.append(f"- {name}({args}) — {spec.description}")
+            else:
+                lines.append(f"- {name}")
+        return "\n".join(lines)
+
     def _fresh_plan(self, instruction: str, available_caps: list[str], hint: Optional[Plan]) -> Plan:
-        prompt = f"INSTRUCTION: {instruction}\n\nAVAILABLE CAPABILITIES: {', '.join(available_caps)}\n"
+        prompt = f"INSTRUCTION: {instruction}\n\nAVAILABLE CAPABILITIES:\n{self._capability_catalog(available_caps)}\n"
         if hint:
             shape = " → ".join(f"{s.capability or 'SYNTHESIZE'}" for s in hint.steps)
             prompt += f"\nA known-good plan shape for this kind of instruction (adapt the arguments): {shape}\n"

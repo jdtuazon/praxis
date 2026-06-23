@@ -225,8 +225,9 @@ def make_offline_responder():
 
     def responder(system: str, prompt: str) -> Optional[str]:
         if "[[ROLE:PLANNER]]" in system:
-            caps_m = re.search(r"AVAILABLE CAPABILITIES:\s*(.+)", prompt)
-            available = set(re.findall(r"[a-z_]+", caps_m.group(1))) if caps_m else set()
+            # Catalog lines look like "- capability_name(args) — description".
+            available = set(re.findall(r"^- (\w+)\(", prompt, re.MULTILINE))
+            available |= set(re.findall(r"^- (\w+)$", prompt, re.MULTILINE))
             return _build_plan(_instruction(prompt), available)
         if "[[ROLE:SYNTHESIZER]]" in system:
             return _build_capability_plan(prompt)
