@@ -47,7 +47,14 @@ def run(
     mem = _memory(settings)
     if no_memory:
         mem = Memory(":memory:")  # ephemeral, cold
-    agent = build_agent(settings, offline=offline, memory=mem)
+    try:
+        agent = build_agent(settings, offline=offline, memory=mem)
+    except (RuntimeError, Exception) as e:  # missing keys etc.
+        from .llm.base import LLMError
+        if isinstance(e, (RuntimeError, LLMError)):
+            console.print(f"[red]{e}[/]\n[yellow]Tip:[/] run with [bold]--offline[/] to try it with no API keys.")
+            raise typer.Exit(1)
+        raise
     report = agent.run(instruction)
     if json_out:
         console.print_json(report.model_dump_json())
