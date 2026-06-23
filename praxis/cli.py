@@ -57,23 +57,24 @@ def run(
 
 @app.command()
 def demo(
-    live: bool = typer.Option(False, "--live", help="Run against the real LLM + Linear (requires .env keys)."),
+    offline: bool = typer.Option(True, "--offline/--live",
+                                 help="Offline (FakeLinear, default) or live (real Linear + LLM, needs .env keys)."),
 ):
     """Run the canonical 3-instruction demo showing synthesis, decision-change, and rollback."""
     from .demo import run_demo
 
-    run_demo(console, offline=not live)
+    run_demo(console, offline=offline)
 
 
 @app.command()
 def bench(
-    live: bool = typer.Option(False, "--live", help="Run against real services."),
+    offline: bool = typer.Option(True, "--offline/--live", help="Offline (default) or live."),
     json_out: bool = typer.Option(False, "--json"),
 ):
     """Reproduce the learning before/after numbers (cold vs warm vs negative control)."""
     from .demo import run_benchmark
 
-    run_benchmark(console, offline=not live, json_out=json_out)
+    run_benchmark(console, offline=offline, json_out=json_out)
 
 
 @app.command()
