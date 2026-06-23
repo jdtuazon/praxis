@@ -16,4 +16,5 @@ class GraphState(TypedDict, total=False):
     t0: float
     api_before: int
     llm_before: int
+    tokens_before: int
     do_rollback: bool

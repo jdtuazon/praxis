@@ -127,7 +127,7 @@ class PraxisAgent:
         duration = time.time() - state["t0"]
         report.total_api_calls = self.client.api_calls - state["api_before"]
         report.total_llm_calls = self.llm.usage.calls - state["llm_before"]
-        report.total_tokens = self.llm.usage.total_tokens
+        report.total_tokens = self.llm.usage.total_tokens - state["tokens_before"]
         report.wasted_calls = ctx.wasted_calls
         report.duration_s = round(duration, 4)
         failed_steps = sum(1 for s in report.steps if s.status in (StepStatus.FAILED, StepStatus.SKIPPED))
@@ -156,6 +156,7 @@ class PraxisAgent:
         state: GraphState = {
             "instruction": instruction, "report": report, "ctx": ctx,
             "t0": time.time(), "api_before": self.client.api_calls, "llm_before": self.llm.usage.calls,
+            "tokens_before": self.llm.usage.total_tokens,
         }
         self._graph.invoke(state)
 
