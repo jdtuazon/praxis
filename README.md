@@ -1,5 +1,10 @@
 # 🍉 Praxis — an autonomous, self-improving agent for Linear
 
+[![CI](https://github.com/jdtuazon/watermelon/actions/workflows/ci.yml/badge.svg)](https://github.com/jdtuazon/watermelon/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB.svg)
+![Next.js](https://img.shields.io/badge/next.js-14-000000.svg)
+
 > *praxis* — the process by which a skill is enacted and **refined through practice**.
 
 Praxis takes a natural-language instruction, decomposes it, executes it against
@@ -213,3 +218,12 @@ tests/                 unit · integration · generative regression
 See the final section of **[ARCHITECTURE.md](ARCHITECTURE.md)** — honest notes on
 `FakeLinear`'s scope, raw-Python synthesis (deliberately deferred behind the
 composition DSL), and the next learning signals worth adding.
+
+## Contributing & license
+
+Development setup, the test/lint/format workflow, and the commit convention
+(Conventional Commits) live in **[CONTRIBUTING.md](CONTRIBUTING.md)**. Notable
+changes are tracked in **[CHANGELOG.md](CHANGELOG.md)**; security notes and the
+synthesis trust boundary are in **[SECURITY.md](SECURITY.md)**.
+
+Licensed under the [MIT License](LICENSE).
