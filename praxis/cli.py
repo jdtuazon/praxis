@@ -136,6 +136,22 @@ def memory_wipe_constraints(memory_path: Optional[str] = typer.Option(None, "--m
     console.print("[green]Constraints wiped (capabilities and plan cache kept).[/]")
 
 
+@memory_app.command("compact")
+def memory_compact(
+    keep_recent: int = typer.Option(10, "--keep-recent", help="Recent runs per signature to keep verbatim."),
+    memory_path: Optional[str] = typer.Option(None, "--memory"),
+):
+    """Summarise old executions into digests instead of growing memory forever."""
+    settings = Settings()
+    if memory_path:
+        settings.memory_path = memory_path
+    notes = _memory(settings).compactor.compact(keep_recent=keep_recent)
+    if not notes:
+        console.print("[dim]Nothing to compact yet.[/]")
+    for n in notes:
+        console.print(f"[green]compacted:[/] {n}")
+
+
 @app.command()
 def serve(
     host: str = typer.Option("127.0.0.1", "--host"),
