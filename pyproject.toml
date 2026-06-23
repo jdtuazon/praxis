@@ -54,6 +54,10 @@ praxis = ["server/static/*"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-q"
+# Put the repo root + tests dir on sys.path so `import praxis` and
+# `from conftest import ...` work under a bare `pytest` invocation (not just
+# `python -m pytest`), which is what CI runs.
+pythonpath = [".", "tests"]
 
 [tool.praxis]
 # Marker so tooling can detect a Praxis project root.

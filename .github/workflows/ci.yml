@@ -7,6 +7,7 @@ on:
 
 jobs:
   test:
+    name: Python tests
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -17,11 +18,33 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - name: Install
-        run: pip install -r requirements.txt
+      - name: Install dependencies + package
+        run: |
+          pip install -r requirements.txt
+          pip install -e . --no-deps
       - name: Test (fully offline — no API keys needed)
         run: pytest -q
       - name: Smoke-run the demo + benchmark offline
         run: |
           python -m praxis demo --offline
           python -m praxis bench
+
+  web:
+    name: Web build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
