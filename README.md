@@ -140,8 +140,32 @@ praxis bench [--json]             # reproduce the learning numbers + negative co
 praxis memory show                # inspect capabilities + learned constraints
 praxis memory wipe-constraints    # the negative control, by hand
 praxis capabilities               # list builtins + synthesized capabilities
-praxis serve                      # web dashboard
+praxis serve                      # JSON API + built-in dashboard
 ```
+
+## Web console (Next.js)
+
+A polished Next.js console lives in [`web/`](web) — instruct the agent, watch the
+plan timeline and synthesis trace, run the learning benchmark, and inspect memory,
+all in the browser. It renders the same structured report as the CLI.
+
+```bash
+praxis serve --offline            # API on :8000 (terminal 1)
+cd web && npm install && npm run dev   # console on :3000 (terminal 2)
+```
+
+The browser only talks to a same-origin proxy (`/papi/*`) that forwards to the API
+at `PRAXIS_API_URL` — no CORS, no exposed backend. See [web/README.md](web/README.md).
+
+## Deployment
+
+- **Everything at once (Docker):** `docker compose up --build` → console on
+  `:3000`, API on `:8000`, with persistent memory on a named volume.
+- **Console on Vercel:** import the repo, set Root Directory to `web`, and add
+  `PRAXIS_API_URL` pointing at your deployed backend.
+- **Backend anywhere:** `docker build -t praxis . && docker run -p 8000:8000 praxis`
+  (defaults to the offline simulation; set `ANTHROPIC_API_KEY` + `LINEAR_API_KEY`
+  and run with `--live` for a real workspace).
 
 ## Dependencies — and why each earns its place
 

@@ -1,0 +1,30 @@
+# Run the whole stack locally:  docker compose up --build
+# → console at http://localhost:3000, API at http://localhost:8000
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Allow the browser to reach the API directly too (the console proxies via
+      # /papi, so this is only needed if you call the API cross-origin).
+      PRAXIS_CORS_ORIGINS: "*"
+      # For a real Linear workspace, uncomment and supply keys, then change the
+      # command to use --live:
+      # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      # LINEAR_API_KEY: ${LINEAR_API_KEY}
+    volumes:
+      - praxis-memory:/data
+
+  web:
+    build: ./web
+    ports:
+      - "3000:3000"
+    environment:
+      # The frontend proxies to the API by its compose service name.
+      PRAXIS_API_URL: "http://api:8000"
+    depends_on:
+      - api
+
+volumes:
+  praxis-memory:

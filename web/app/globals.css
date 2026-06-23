@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-bg text-text font-sans antialiased;
+    background-image:
+      radial-gradient(900px 500px at 78% -10%, rgba(123, 140, 255, 0.06), transparent 60%),
+      radial-gradient(700px 400px at 0% 100%, rgba(79, 208, 200, 0.045), transparent 55%);
+    background-attachment: fixed;
+  }
+  ::selection {
+    background: rgba(123, 140, 255, 0.28);
+  }
+  /* Visible keyboard focus everywhere. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-iris/70 ring-offset-2 ring-offset-bg;
+  }
+  /* Thin, considered scrollbars. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #2a3346 transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: #232a3a;
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-md border border-line bg-surface shadow-panel;
+  }
+  .label {
+    @apply font-mono text-2xs uppercase tracking-label text-faint;
+  }
+  .hairline {
+    @apply border-t border-line-soft;
+  }
+  /* Numeric data lines up in columns. */
+  .nums {
+    font-variant-numeric: tabular-nums;
+  }
+  .link {
+    @apply text-iris transition-colors hover:text-text;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

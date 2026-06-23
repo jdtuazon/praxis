@@ -9,9 +9,11 @@ benchmark, all in the browser.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
@@ -29,6 +31,15 @@ class RunRequest(BaseModel):
 
 def create_app(*, offline: bool = True) -> FastAPI:
     app = FastAPI(title="Praxis", docs_url="/api/docs")
+    # The Next.js frontend (dev + deployed) calls this API directly when not
+    # proxied. Origins are configurable; default permissive for the demo.
+    origins = os.getenv("PRAXIS_CORS_ORIGINS", "*").split(",")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[o.strip() for o in origins],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     settings = Settings()
     state: dict = {
         "memory": Memory(":memory:" if offline else settings.memory_file()),
@@ -73,6 +84,24 @@ def create_app(*, offline: bool = True) -> FastAPI:
     def wipe() -> JSONResponse:
         state["memory"].wipe_constraints()
         return JSONResponse({"ok": True})
+
+    @app.get("/api/health")
+    def health() -> JSONResponse:
+        return JSONResponse({"ok": True})
+
+    @app.get("/api/meta")
+    def meta() -> JSONResponse:
+        return JSONResponse({
+            "mode": "offline" if state["offline"] else "live",
+            "platform": "Linear",
+            "llm_ready": settings.llm_ready(),
+            "platform_ready": settings.platform_ready(),
+        })
+
+    @app.get("/api/examples")
+    def examples() -> JSONResponse:
+        from ..demo import DEMO_STEPS
+        return JSONResponse([{"label": label, "instruction": instr} for label, instr in DEMO_STEPS])
 
     @app.get("/api/bench")
     def bench() -> JSONResponse:

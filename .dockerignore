@@ -1,0 +1,9 @@
+.git
+.venv
+web
+**/__pycache__
+*.pyc
+.pytest_cache
+.praxis
+*.sqlite
+tests
