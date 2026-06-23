@@ -33,3 +33,10 @@ def test_grouping_keeps_distinct():
     by_pri = compute_signature("digest grouped by priority")
     by_asg = compute_signature("digest grouped by assignee")
     assert by_pri != by_asg
+
+
+def test_add_a_comment_is_not_a_create():
+    # 'add a comment' is a comment, not creating an issue.
+    assert compute_signature("Add a comment to ENG-1 asking for an update").startswith("comment")
+    # but 'add a dark mode toggle' (creating an issue) is still a create-ish action
+    assert not compute_signature("Add a bug for the dark mode toggle").startswith("comment")

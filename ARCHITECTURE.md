@@ -87,11 +87,23 @@ graph, compaction, confidence scoring, rollback). `FakeLinear` is a faithful but
 Linear; the synthesizer is schema-driven, so it operates on whichever schema it
 introspects.
 
-If I had more time: (a) **raw-Python capability synthesis** behind an AST
-allowlist + subprocess sandbox (CPU/mem/no-net), currently deferred in favour of
-the safe composition DSL; (b) **staleness/verification policies** exercised in
-the demo (TTL re-resolve for volatile ids — the fields exist, the live path
-isn't shown); (c) a **tool-selection** learning signal once two capabilities
-genuinely compete for a step (e.g. a discovered batch mutation vs N single
-calls); (d) **concurrent execution** of independent plan branches (the DAG is
-modelled; execution is sequential today for deterministic rollback ordering).
+Honest scope notes: the decision-changing learning currently covers the
+**workflow-rule family** — `requires <field> before <state-type>` — which is
+field-agnostic and team-scoped, but it is one rule *type*; the constraint store
+and plan-rewrite hook generalize to more. The **rate-limit** constraint is
+learned and surfaced for operator awareness, but throttling itself is reactive
+(tenacity backoff in the client), not yet proactive. The **destructive
+canary+rollback** test tier is designed and config-gated but not wired — the
+shipped synthesizer validates only with non-destructive tiers.
+
+If I had more time: (a) **more learned rule types** driving plan rewrites
+(required sub-issues, label policies, assignment rules); (b) **raw-Python
+capability synthesis** behind an AST allowlist + subprocess sandbox
+(CPU/mem/no-net), deliberately deferred in favour of the safe composition DSL;
+(c) the **destructive canary tier** in a sandbox team with `[PRAXIS-PROBE]`
+markers + read-back verify; (d) a **tool-selection** learning signal once two
+capabilities genuinely compete for a step (a discovered batch mutation vs N
+single calls); (e) **concurrent execution** of independent plan branches (the
+DAG is modelled; execution is sequential today for deterministic rollback
+ordering); (f) the **live LLM+Linear path** is exercised by an env-gated smoke
+test — broader live coverage and a recorded-cassette mode are next.

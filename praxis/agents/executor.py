@@ -172,21 +172,27 @@ class Executor:
                 ctx.note_saving(att)
                 sr.provenance.append(att)
 
-            # 4) resolver cache: skip the API call if this entity is already known
+            # 4) resolver cache: skip the API call if this entity is already known —
+            # but honour the constraint's verification policy (a volatile id under
+            # VERIFY_ON_READ, or an expired REFETCH_TTL, is re-resolved as a
+            # NON-saving call rather than trusted blindly).
             if cap_name in RESOLVER_CAPS:
                 key = _entity_key(cap_name, args)
-                cached = self.memory.capability.cached_entity_id("entity", key)
-                if cached is not None:
-                    ctx.vars[f"step{step.index}"] = cached
+                row = self.memory.capability.constraint_row(kind=ConstraintKind.ENTITY_ID, scope="entity", key=key)
+                if row is not None and not self._must_reverify(row):
+                    ctx.vars[f"step{step.index}"] = self.memory.store.loads(row["value_json"])
                     att = CallAttribution(kind="cached_entity", ref=f"entity/{key}",
                                           detail=f"reused cached result; skipped {cap_name} API call")
                     sr.provenance.append(att)
                     ctx.note_saving(att)
                     self.memory.capability.bump_hit(kind=ConstraintKind.ENTITY_ID, scope="entity", key=key)
                     sr.status = StepStatus.SUCCESS
-                    sr.result_summary = f"{_summarize(cached)} (from memory)"
+                    sr.result_summary = f"{_summarize(self.memory.store.loads(row['value_json']))} (from memory)"
                     reports[step.index] = sr
                     continue
+                if row is not None:  # stale-but-likely → re-resolve (counted, not saved); learner re-caches
+                    sr.provenance.append(CallAttribution(kind="reverify", ref=f"entity/{key}",
+                                                         detail="cache present but verification policy required a re-resolve"))
 
             # 5) execute
             before = ctx.client.api_calls
@@ -235,6 +241,18 @@ class Executor:
         ordered = [reports[s.index] for s in plan.steps]
         return ordered, decisions, synth_results
 
+    @staticmethod
+    def _must_reverify(row) -> bool:
+        """Decide whether a cached entity must be re-resolved before trusting it."""
+        import time as _t
+
+        policy = row["verification_policy"]
+        if policy == "verify_on_read":
+            return True
+        if policy == "refetch_ttl" and row["ttl_seconds"]:
+            return (_t.time() - row["observed_at"]) > row["ttl_seconds"]
+        return False  # trust (stable workspace ids)
+
     # ── conditional applicability of a constraint-inserted precondition step ──
     def _workflow_rule_applies(self, ctx, args: dict) -> tuple[bool, str]:
         """Is the inserted precondition genuinely required for THIS issue's team?
@@ -254,27 +272,41 @@ class Executor:
             return True, f"team {team_id} requires {field} before this transition"
         return False, f"team {team_id} has no '{field}' rule"
 
-    # ── pre-validation against learned enum constraints ─────────────────────
+    # ── pre-validation against learned constraints (enum + required-field) ───
     def _prevalidate(self, cap_name: str, args: dict[str, Any], ctx: ExecutionContext, sr: StepReport) -> dict[str, Any]:
-        if cap_name not in ("create_issue", "update_issue") or "priority" not in args:
+        if cap_name not in ("create_issue", "update_issue"):
             return args
-        c = self.memory.capability.enum_constraint("issue.priority")
-        if not c or not isinstance(c.value, dict):
-            return args
-        val = args["priority"]
-        mapping = c.value.get("map") or {}
-        rng = c.value.get("range")
-        # NL → code mapping (e.g. "urgent" → 1) learned from a prior response.
-        if isinstance(val, str) and val.lower() in mapping:
-            args = {**args, "priority": mapping[val.lower()]}
-            att = CallAttribution(kind="pre_validated", ref="constraint:field/issue.priority",
-                                  detail=f"mapped '{val}' → {args['priority']} from learned enum")
-            sr.provenance.append(att); ctx.note_saving(att)
-        elif rng and isinstance(val, int) and not (rng[0] <= val <= rng[1]):
-            clamped = max(rng[0], min(rng[1], val))
-            args = {**args, "priority": clamped}
-            att = CallAttribution(kind="pre_validated", ref="constraint:field/issue.priority",
-                                  detail=f"clamped priority {val} → {clamped} (learned range {rng}); avoided a failed call")
-            sr.provenance.append(att); ctx.note_saving(att)
-            self.memory.capability.bump_hit(kind=ConstraintKind.ENUM, scope="field", key="issue.priority")
+        entity = "issue"
+        # Enum constraints for ANY field present (not hard-coded to priority):
+        # map NL→code and clamp out-of-range values from learned ENUM facts.
+        for arg in list(args):
+            c = self.memory.capability.enum_constraint(f"{entity}.{arg}")
+            if not c or not isinstance(c.value, dict):
+                continue
+            val = args[arg]
+            mapping = c.value.get("map") or {}
+            rng = c.value.get("range")
+            if isinstance(val, str) and val.lower() in mapping:
+                args = {**args, arg: mapping[val.lower()]}
+                self._note(sr, ctx, f"{entity}.{arg}", f"mapped '{val}' → {args[arg]} from learned enum")
+            elif rng and isinstance(val, int) and not (rng[0] <= val <= rng[1]):
+                clamped = max(rng[0], min(rng[1], val))
+                args = {**args, arg: clamped}
+                # Honest: this overrides an explicit out-of-range value — flag it, don't hide it.
+                sr.error = (sr.error or "") + f"note: clamped {arg} {val}→{clamped} to learned range {rng}; "
+                self._note(sr, ctx, f"{entity}.{arg}", f"clamped {arg} {val}→{clamped} (learned range {rng}); avoided a failed call")
+                self.memory.capability.bump_hit(kind=ConstraintKind.ENUM, scope="field", key=f"{entity}.{arg}")
+        # Required-field constraints: advise (don't fabricate) when a known-required field is absent.
+        for c in self.memory.capability.get_constraints(scope="mutation", key=cap_name, kind=ConstraintKind.REQUIRED_FIELD):
+            for field in (c.value or []):
+                if field not in args:
+                    sr.provenance.append(CallAttribution(
+                        kind="pre_validated", ref=f"constraint:mutation/{cap_name}",
+                        detail=f"memory flags '{field}' as required for {cap_name} but it is absent"))
         return args
+
+    @staticmethod
+    def _note(sr: StepReport, ctx: ExecutionContext, key: str, detail: str) -> None:
+        att = CallAttribution(kind="pre_validated", ref=f"constraint:field/{key}", detail=detail)
+        sr.provenance.append(att)
+        ctx.note_saving(att)

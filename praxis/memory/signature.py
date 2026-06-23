@@ -83,6 +83,11 @@ def compute_signature(instruction: str) -> str:
     # not a create, regardless of which verb word appears first.
     if any(n in text for n in _VERBS[0][1]):
         verb = "aggregate"
+    # "add a comment/note" is a comment, not a create (the create-ish "add" only
+    # means create when an issue-like object is being created).
+    if verb == "create" and any(w in text for w in ("comment", " note ")) \
+            and not any(n in text for n in ("bug", "issue", "ticket", "task", "story", "defect", "project")):
+        verb = "comment"
     entity = _earliest(text, _ENTITIES) or "issue"
     predicates = sorted(set(_match_all(text, _PREDICATES)))
     # Mutation-field tags only matter for write verbs; queries/aggregations are

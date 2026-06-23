@@ -28,6 +28,10 @@ class Compactor:
             baseline = rows[0]
             # Candidates to fold: everything except the baseline and the most recent N.
             foldable = rows[1:-keep_recent]
+            # Never delete a row still referenced by the plan_cache (it backs the
+            # reusable plan's provenance + similarity scoring in find_reusable_plan).
+            referenced = {r["execution_id"] for r in self.store.query("SELECT execution_id FROM plan_cache")}
+            foldable = [r for r in foldable if r["id"] not in referenced]
             if not foldable:
                 continue
             latest = rows[-1]
