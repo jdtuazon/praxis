@@ -12,7 +12,6 @@ ends by writing structured knowledge that changes the next run.
 from __future__ import annotations
 
 import time
-from typing import Optional
 
 from langgraph.graph import END, START, StateGraph
 
@@ -60,7 +59,11 @@ class PraxisAgent:
         for spec in self.memory.capability.list_capabilities(source=CapabilitySource.SYNTHESIZED):
             # Stale-schema guard: a synthesized GraphQL cap built against a
             # different schema is marked for re-test rather than blindly reused.
-            if spec.kind == CapabilityKind.GRAPHQL and spec.schema_hash and spec.schema_hash != self.client.schema_hash():
+            if (
+                spec.kind == CapabilityKind.GRAPHQL
+                and spec.schema_hash
+                and spec.schema_hash != self.client.schema_hash()
+            ):
                 continue
             self.registry.register(Capability(spec=spec))
 
@@ -75,8 +78,11 @@ class PraxisAgent:
         g.add_edge(START, "plan")
         g.add_edge("plan", "execute")
         g.add_edge("execute", "validate")
-        g.add_conditional_edges("validate", lambda s: "compensate" if s.get("do_rollback") else "learn",
-                                {"compensate": "compensate", "learn": "learn"})
+        g.add_conditional_edges(
+            "validate",
+            lambda s: "compensate" if s.get("do_rollback") else "learn",
+            {"compensate": "compensate", "learn": "learn"},
+        )
         g.add_edge("compensate", "learn")
         g.add_edge("learn", END)
         return g.compile()
@@ -84,7 +90,9 @@ class PraxisAgent:
     # ── nodes ─────────────────────────────────────────────────────────────────
     def _node_plan(self, state: GraphState) -> dict:
         report = state["report"]
-        plan, decisions = self.planner.plan(state["instruction"], available_caps=self.registry.names())
+        plan, decisions = self.planner.plan(
+            state["instruction"], available_caps=self.registry.names()
+        )
         report.plan = plan
         report.decisions.extend(decisions)
         return {"plan": plan}
@@ -95,7 +103,9 @@ class PraxisAgent:
         report.steps = steps
         report.decisions.extend(decisions)
         report.synthesis = synth
-        report.synthesized_capabilities = [r.capability_name for r in synth if r.success and r.capability_name]
+        report.synthesized_capabilities = [
+            r.capability_name for r in synth if r.success and r.capability_name
+        ]
         return {}
 
     def _node_validate(self, state: GraphState) -> dict:
@@ -130,32 +140,49 @@ class PraxisAgent:
         report.total_tokens = self.llm.usage.total_tokens - state["tokens_before"]
         report.wasted_calls = ctx.wasted_calls
         report.duration_s = round(duration, 4)
-        failed_steps = sum(1 for s in report.steps if s.status in (StepStatus.FAILED, StepStatus.SKIPPED))
+        failed_steps = sum(
+            1 for s in report.steps if s.status in (StepStatus.FAILED, StepStatus.SKIPPED)
+        )
 
         # learning comparison BEFORE recording this run (baseline = first prior run)
         report.learning = self.learner.compare(
-            plan, api_calls=report.total_api_calls, llm_calls=report.total_llm_calls,
-            wasted_calls=report.wasted_calls, duration_s=duration, failed_steps=failed_steps,
-            synthesized=len(report.synthesized_capabilities), ctx=ctx,
+            plan,
+            api_calls=report.total_api_calls,
+            llm_calls=report.total_llm_calls,
+            wasted_calls=report.wasted_calls,
+            duration_s=duration,
+            failed_steps=failed_steps,
+            synthesized=len(report.synthesized_capabilities),
+            ctx=ctx,
         )
         # record execution → exec id, then extract knowledge with provenance
         exec_id = self.memory.execution.record_execution(report)
         report.execution_id = exec_id
-        report.discovered_constraints = self.learner.learn(ctx, execution_id=exec_id, plan=plan, steps=report.steps)
+        report.discovered_constraints = self.learner.learn(
+            ctx, execution_id=exec_id, plan=plan, steps=report.steps
+        )
         return {}
 
     # ── public API ─────────────────────────────────────────────────────────
     def run(self, instruction: str) -> ExecutionReport:
         memory_before = self.memory.snapshot()
-        ctx = ExecutionContext(client=self.client, registry=self.registry,
-                               memory=self.memory, settings=self.settings)
+        ctx = ExecutionContext(
+            client=self.client, registry=self.registry, memory=self.memory, settings=self.settings
+        )
         report = ExecutionReport(
-            instruction=instruction, status=ExecutionStatus.FAILED,
-            started_at=time.time(), finished_at=0.0, plan=_empty_plan(instruction),
+            instruction=instruction,
+            status=ExecutionStatus.FAILED,
+            started_at=time.time(),
+            finished_at=0.0,
+            plan=_empty_plan(instruction),
         )
         state: GraphState = {
-            "instruction": instruction, "report": report, "ctx": ctx,
-            "t0": time.time(), "api_before": self.client.api_calls, "llm_before": self.llm.usage.calls,
+            "instruction": instruction,
+            "report": report,
+            "ctx": ctx,
+            "t0": time.time(),
+            "api_before": self.client.api_calls,
+            "llm_before": self.llm.usage.calls,
             "tokens_before": self.llm.usage.total_tokens,
         }
         self._graph.invoke(state)
@@ -171,13 +198,17 @@ class PraxisAgent:
 
 def _empty_plan(instruction: str):
     from ..models import Plan
+
     return Plan(instruction=instruction, intent_signature=compute_signature(instruction))
 
 
 def _summarize_report(report: ExecutionReport) -> str:
     n_ok = sum(1 for s in report.steps if s.status == StepStatus.SUCCESS)
-    parts = [f"{report.status.value.upper()}", f"{n_ok}/{len(report.steps)} steps",
-             f"{report.total_api_calls} API calls"]
+    parts = [
+        f"{report.status.value.upper()}",
+        f"{n_ok}/{len(report.steps)} steps",
+        f"{report.total_api_calls} API calls",
+    ]
     if report.wasted_calls:
         parts.append(f"{report.wasted_calls} wasted")
     if report.synthesized_capabilities:

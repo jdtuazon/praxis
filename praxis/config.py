@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 from dotenv import load_dotenv
 from pydantic import Field
@@ -22,14 +22,12 @@ class Settings(BaseSettings):
     )
     # Reasoning model drives planning + synthesis (quality matters most here).
     llm_model: str = Field(default="claude-sonnet-4-6", alias="PRAXIS_LLM_MODEL")
-    anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
-    openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
+    anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
+    openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
 
     # ── Platform: Linear ───────────────────────────────────────────────────────
-    linear_api_key: Optional[str] = Field(default=None, alias="LINEAR_API_KEY")
-    linear_api_url: str = Field(
-        default="https://api.linear.app/graphql", alias="LINEAR_API_URL"
-    )
+    linear_api_key: str | None = Field(default=None, alias="LINEAR_API_KEY")
+    linear_api_url: str = Field(default="https://api.linear.app/graphql", alias="LINEAR_API_URL")
 
     # ── Memory ─────────────────────────────────────────────────────────────────
     memory_path: str = Field(default=".praxis/memory.sqlite", alias="PRAXIS_MEMORY_PATH")
@@ -44,11 +42,9 @@ class Settings(BaseSettings):
     # If true, side-effecting capabilities may be validated with a real
     # create-canary-then-inverse-op probe (in a sandbox team, with [PRAXIS-PROBE]
     # markers). If false, the synthesizer stops at non-destructive test tiers.
-    require_rollback_journal: bool = Field(
-        default=True, alias="PRAXIS_REQUIRE_ROLLBACK_JOURNAL"
-    )
+    require_rollback_journal: bool = Field(default=True, alias="PRAXIS_REQUIRE_ROLLBACK_JOURNAL")
     # Team used for destructive synthesis canaries (keeps probes out of real teams).
-    sandbox_team_key: Optional[str] = Field(default=None, alias="PRAXIS_SANDBOX_TEAM_KEY")
+    sandbox_team_key: str | None = Field(default=None, alias="PRAXIS_SANDBOX_TEAM_KEY")
 
     def memory_file(self) -> Path:
         p = Path(self.memory_path)

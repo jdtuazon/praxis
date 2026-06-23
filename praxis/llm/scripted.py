@@ -9,11 +9,11 @@ so regression tests can prove the learning signal with hard numbers.
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from .base import LLM
 
-Responder = Callable[[str, str], Optional[str]]
+Responder = Callable[[str, str], str | None]
 
 
 class ScriptedLLM(LLM):
@@ -27,7 +27,9 @@ class ScriptedLLM(LLM):
     def name(self) -> str:
         return f"scripted:{self._model}"
 
-    def _generate(self, system: str, prompt: str, max_tokens: int, json_mode: bool) -> tuple[str, int, int]:
+    def _generate(
+        self, system: str, prompt: str, max_tokens: int, json_mode: bool
+    ) -> tuple[str, int, int]:
         self.prompts.append((system, prompt))
         text = self._responder(system, prompt)
         if text is None:

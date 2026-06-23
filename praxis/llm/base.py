@@ -28,10 +28,10 @@ class LLMUsage:
     def total_tokens(self) -> int:
         return self.input_tokens + self.output_tokens
 
-    def snapshot(self) -> "LLMUsage":
+    def snapshot(self) -> LLMUsage:
         return LLMUsage(self.calls, self.input_tokens, self.output_tokens)
 
-    def since(self, other: "LLMUsage") -> "LLMUsage":
+    def since(self, other: LLMUsage) -> LLMUsage:
         return LLMUsage(
             self.calls - other.calls,
             self.input_tokens - other.input_tokens,
@@ -52,10 +52,14 @@ class LLM(ABC):
     def name(self) -> str: ...
 
     @abstractmethod
-    def _generate(self, system: str, prompt: str, max_tokens: int, json_mode: bool) -> tuple[str, int, int]:
+    def _generate(
+        self, system: str, prompt: str, max_tokens: int, json_mode: bool
+    ) -> tuple[str, int, int]:
         """Return (text, input_tokens, output_tokens)."""
 
-    def generate(self, system: str, prompt: str, *, max_tokens: int = 2048, json_mode: bool = False) -> str:
+    def generate(
+        self, system: str, prompt: str, *, max_tokens: int = 2048, json_mode: bool = False
+    ) -> str:
         text, it, ot = self._generate(system, prompt, max_tokens, json_mode)
         self.usage.calls += 1
         self.usage.input_tokens += it

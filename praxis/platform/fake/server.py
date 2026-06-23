@@ -19,7 +19,7 @@ discovers and operates exactly as it would the real one. The production path
 from __future__ import annotations
 
 import copy
-from typing import Any, Optional
+from typing import Any
 
 from graphql import GraphQLError, build_schema, graphql_sync
 
@@ -148,9 +148,9 @@ class FakeLinear:
     def __init__(
         self,
         *,
-        rate_limit_after: Optional[int] = None,
+        rate_limit_after: int | None = None,
         forbid_delete: bool = True,
-        require_estimate_to_complete: Optional[set[str]] = None,
+        require_estimate_to_complete: set[str] | None = None,
     ) -> None:
         self._schema = build_schema(SDL)
         self.store = seed()
@@ -158,23 +158,29 @@ class FakeLinear:
         self._clock = 1_700_000_000  # deterministic monotonic clock
         # ── simulated constraints / faults ─────────────────────────────────
         self.rate_limit_after = rate_limit_after  # raise RATELIMITED after N writes
-        self.forbid_delete = forbid_delete         # issueDelete → FORBIDDEN
+        self.forbid_delete = forbid_delete  # issueDelete → FORBIDDEN
         # Workspace policy NOT derivable from the schema: these teams require an
         # estimate before an issue may transition into a completed state. This is
         # the runtime-learned rule that makes the agent *rewrite its plan*.
         self.require_estimate_to_complete = (
-            require_estimate_to_complete if require_estimate_to_complete is not None else {"team_eng"}
+            require_estimate_to_complete
+            if require_estimate_to_complete is not None
+            else {"team_eng"}
         )
         # ── observability for tests ────────────────────────────────────────
-        self.calls = 0                              # total GraphQL documents executed
-        self.op_counts: dict[str, int] = {}         # per-mutation invocation counts
-        self.side_effect_log: list[str] = []        # notifications/webhooks that would fire (irreversible)
+        self.calls = 0  # total GraphQL documents executed
+        self.op_counts: dict[str, int] = {}  # per-mutation invocation counts
+        self.side_effect_log: list[
+            str
+        ] = []  # notifications/webhooks that would fire (irreversible)
         self._writes = 0
 
     # ── public transport API ───────────────────────────────────────────────
     def execute(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
         self.calls += 1
-        result = graphql_sync(self._schema, query, variable_values=variables, root_value=self._root())
+        result = graphql_sync(
+            self._schema, query, variable_values=variables, root_value=self._root()
+        )
         out: dict[str, Any] = {}
         if result.data is not None:
             out["data"] = result.data
@@ -213,38 +219,43 @@ class FakeLinear:
                 retryAfter=2,
             )
 
-    def _team(self, tid: str) -> Optional[dict]:
+    def _team(self, tid: str) -> dict | None:
         return next((t for t in self.store["teams"] if t["id"] == tid), None)
 
-    def _user(self, uid: Optional[str]) -> Optional[dict]:
+    def _user(self, uid: str | None) -> dict | None:
         if not uid:
             return None
         return next((u for u in self.store["users"] if u["id"] == uid), None)
 
-    def _state(self, sid: str) -> Optional[dict]:
+    def _state(self, sid: str) -> dict | None:
         return next((s for s in self.store["states"] if s["id"] == sid), None)
 
-    def _label(self, lid: str) -> Optional[dict]:
-        return next((l for l in self.store["labels"] if l["id"] == lid), None)
+    def _label(self, lid: str) -> dict | None:
+        return next((lbl for lbl in self.store["labels"] if lbl["id"] == lid), None)
 
-    def _issue(self, iid: str) -> Optional[dict]:
+    def _issue(self, iid: str) -> dict | None:
         return next((i for i in self.store["issues"] if i["id"] == iid), None)
 
     # ── view builders (resolve relations eagerly into dicts) ─────────────────
     def _team_view(self, t: dict) -> dict:
         return {"id": t["id"], "key": t["key"], "name": t["name"]}
 
-    def _user_view(self, u: Optional[dict]) -> Optional[dict]:
+    def _user_view(self, u: dict | None) -> dict | None:
         if not u:
             return None
-        return {"id": u["id"], "name": u["name"], "email": u["email"], "displayName": u["displayName"]}
+        return {
+            "id": u["id"],
+            "name": u["name"],
+            "email": u["email"],
+            "displayName": u["displayName"],
+        }
 
     def _state_view(self, s: dict) -> dict:
         team = self._team(s["teamId"])
         return {"id": s["id"], "name": s["name"], "type": s["type"], "team": self._team_view(team)}
 
-    def _label_view(self, l: dict) -> dict:
-        return {"id": l["id"], "name": l["name"], "color": l.get("color")}
+    def _label_view(self, lbl: dict) -> dict:
+        return {"id": lbl["id"], "name": lbl["name"], "color": lbl.get("color")}
 
     def _conn(self, nodes: list) -> dict:
         return {"nodes": nodes, "pageInfo": {"hasNextPage": False, "endCursor": None}}
@@ -253,7 +264,9 @@ class FakeLinear:
         team = self._team(i["teamId"])
         state = self._state(i["stateId"])
         assignee = self._user(i.get("assigneeId"))
-        labels = [self._label_view(self._label(lid)) for lid in i.get("labelIds", []) if self._label(lid)]
+        labels = [
+            self._label_view(self._label(lid)) for lid in i.get("labelIds", []) if self._label(lid)
+        ]
         comments = [
             self._comment_view(c) for c in self.store["comments"] if c["issueId"] == i["id"]
         ]
@@ -286,32 +299,50 @@ class FakeLinear:
 
     def _project_view(self, p: dict) -> dict:
         return {
-            "id": p["id"], "name": p["name"], "description": p.get("description"),
-            "state": p.get("state", "planned"), "url": f"https://linear.app/acme/project/{p['id']}",
+            "id": p["id"],
+            "name": p["name"],
+            "description": p.get("description"),
+            "state": p.get("state", "planned"),
+            "url": f"https://linear.app/acme/project/{p['id']}",
         }
 
     def _document_view(self, d: dict) -> dict:
         return {
-            "id": d["id"], "title": d["title"], "content": d["content"],
-            "url": f"https://linear.app/acme/document/{d['id']}", "createdAt": d["createdAt"],
+            "id": d["id"],
+            "title": d["title"],
+            "content": d["content"],
+            "url": f"https://linear.app/acme/document/{d['id']}",
+            "createdAt": d["createdAt"],
         }
 
     # ── root resolver map ────────────────────────────────────────────────────
     def _root(self) -> dict:
         return {
             "viewer": lambda info: self._user_view(self.store["users"][0]),
-            "teams": lambda info, first=None: self._conn([self._team_view(t) for t in self.store["teams"]]),
-            "team": lambda info, id: (self._team_view(self._team(id)) if self._team(id) else None),
-            "users": lambda info, first=None: self._conn([self._user_view(u) for u in self.store["users"]]),
+            "teams": lambda info, first=None: self._conn(
+                [self._team_view(t) for t in self.store["teams"]]
+            ),
+            "team": lambda info, id: self._team_view(self._team(id)) if self._team(id) else None,
+            "users": lambda info, first=None: self._conn(
+                [self._user_view(u) for u in self.store["users"]]
+            ),
             "workflowStates": self._r_workflow_states,
-            "issueLabels": lambda info, first=None: self._conn([self._label_view(l) for l in self.store["labels"]]),
+            "issueLabels": lambda info, first=None: self._conn(
+                [self._label_view(lbl) for lbl in self.store["labels"]]
+            ),
             "issues": self._r_issues,
-            "issue": lambda info, id: (self._issue_view(self._issue(id)) if self._issue(id) else None),
-            "projects": lambda info, first=None: self._conn([self._project_view(p) for p in self.store["projects"]]),
+            "issue": lambda info, id: (
+                self._issue_view(self._issue(id)) if self._issue(id) else None
+            ),
+            "projects": lambda info, first=None: self._conn(
+                [self._project_view(p) for p in self.store["projects"]]
+            ),
             "project": lambda info, id: next(
                 (self._project_view(p) for p in self.store["projects"] if p["id"] == id), None
             ),
-            "documents": lambda info, first=None: self._conn([self._document_view(d) for d in self.store["documents"]]),
+            "documents": lambda info, first=None: self._conn(
+                [self._document_view(d) for d in self.store["documents"]]
+            ),
             # mutations
             "issueCreate": self._m_issue_create,
             "issueUpdate": self._m_issue_update,
@@ -351,7 +382,11 @@ class FakeLinear:
         if f.get("stateId"):
             issues = [i for i in issues if i["stateId"] == f["stateId"]]
         if f.get("stateType"):
-            issues = [i for i in issues if self._state(i["stateId"]) and self._state(i["stateId"])["type"] == f["stateType"]]
+            issues = [
+                i
+                for i in issues
+                if self._state(i["stateId"]) and self._state(i["stateId"])["type"] == f["stateType"]
+            ]
         if f.get("priority") is not None:
             issues = [i for i in issues if i.get("priority") == f["priority"]]
         if first:
@@ -372,12 +407,18 @@ class FakeLinear:
             if not isinstance(p, int) or p < 0 or p > 4:
                 raise _err(
                     "priority must be an integer between 0 (none) and 4 (low).",
-                    "INVALID_INPUT", field="priority", allowed={"min": 0, "max": 4},
+                    "INVALID_INPUT",
+                    field="priority",
+                    allowed={"min": 0, "max": 4},
                 )
         if inp.get("stateId") and not self._state(inp["stateId"]):
-            raise _err(f"Workflow state '{inp['stateId']}' not found.", "ENTITY_NOT_FOUND", field="stateId")
+            raise _err(
+                f"Workflow state '{inp['stateId']}' not found.", "ENTITY_NOT_FOUND", field="stateId"
+            )
         if inp.get("assigneeId") and not self._user(inp["assigneeId"]):
-            raise _err(f"User '{inp['assigneeId']}' not found.", "ENTITY_NOT_FOUND", field="assigneeId")
+            raise _err(
+                f"User '{inp['assigneeId']}' not found.", "ENTITY_NOT_FOUND", field="assigneeId"
+            )
         for lid in inp.get("labelIds") or []:
             if not self._label(lid):
                 raise _err(f"Label '{lid}' not found.", "ENTITY_NOT_FOUND", field="labelIds")
@@ -391,7 +432,11 @@ class FakeLinear:
         # default state = first unstarted/backlog state for the team
         state_id = input.get("stateId")
         if not state_id:
-            cand = [s for s in self.store["states"] if s["teamId"] == team["id"] and s["type"] in ("unstarted", "backlog")]
+            cand = [
+                s
+                for s in self.store["states"]
+                if s["teamId"] == team["id"] and s["type"] in ("unstarted", "backlog")
+            ]
             state_id = cand[0]["id"] if cand else self.store["states"][0]["id"]
         seq = sum(1 for i in self.store["issues"] if i["teamId"] == team["id"]) + 1
         issue = {
@@ -471,7 +516,8 @@ class FakeLinear:
         if self.forbid_delete:
             raise _err(
                 "Your API token does not have permission to permanently delete issues.",
-                "FORBIDDEN", operation="issueDelete",
+                "FORBIDDEN",
+                operation="issueDelete",
             )
         issue = self._issue(id)
         if not issue:
@@ -486,7 +532,9 @@ class FakeLinear:
             raise _err("Argument 'body' is required.", "INVALID_INPUT", field="body")
         issue = self._issue(input["issueId"])
         if not issue:
-            raise _err(f"Issue '{input['issueId']}' not found.", "ENTITY_NOT_FOUND", field="issueId")
+            raise _err(
+                f"Issue '{input['issueId']}' not found.", "ENTITY_NOT_FOUND", field="issueId"
+            )
         self._bump_write()
         comment = {
             "id": self._next_id("comment"),

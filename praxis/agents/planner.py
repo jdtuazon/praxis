@@ -12,13 +12,9 @@ Memory makes the planner behave differently over time:
 
 from __future__ import annotations
 
-from typing import Optional
-
 from ..llm.base import LLM
 from ..memory import compute_signature
 from ..models import (
-    CallAttribution,
-    Constraint,
     ConstraintKind,
     Decision,
     Plan,
@@ -63,20 +59,24 @@ class Planner:
             plan.reused_from_execution_id = reusable.execution_id
             plan.intent_signature = sig
             plan.confidence = min(0.99, 0.7 + 0.05 * reusable.success_count)
-            decisions.append(Decision(
-                stage="plan",
-                summary=f"Reused cached plan shape from execution #{reusable.execution_id} (no re-planning)",
-                rationale=f"Exact-signature match '{sig}', proven {reusable.success_count}×.",
-            ))
+            decisions.append(
+                Decision(
+                    stage="plan",
+                    summary=f"Reused cached plan shape from execution #{reusable.execution_id} (no re-planning)",
+                    rationale=f"Exact-signature match '{sig}', proven {reusable.success_count}×.",
+                )
+            )
         else:
             hint = None
             if reusable:
                 hint = reusable.plan
-                decisions.append(Decision(
-                    stage="plan",
-                    summary=f"Adapted plan shape from execution #{reusable.execution_id}",
-                    rationale=f"Same intent-signature '{sig}', different parameters → reuse structure, re-bind content.",
-                ))
+                decisions.append(
+                    Decision(
+                        stage="plan",
+                        summary=f"Adapted plan shape from execution #{reusable.execution_id}",
+                        rationale=f"Same intent-signature '{sig}', different parameters → reuse structure, re-bind content.",
+                    )
+                )
             plan = self._fresh_plan(instruction, available_caps, hint)
             plan.source = PlanSource.ADAPTED if reusable else PlanSource.FRESH
             plan.reused_from_execution_id = reusable.execution_id if reusable else None
@@ -100,7 +100,7 @@ class Planner:
                 lines.append(f"- {name}")
         return "\n".join(lines)
 
-    def _fresh_plan(self, instruction: str, available_caps: list[str], hint: Optional[Plan]) -> Plan:
+    def _fresh_plan(self, instruction: str, available_caps: list[str], hint: Plan | None) -> Plan:
         prompt = f"INSTRUCTION: {instruction}\n\nAVAILABLE CAPABILITIES:\n{self._capability_catalog(available_caps)}\n"
         if hint:
             shape = " → ".join(f"{s.capability or 'SYNTHESIZE'}" for s in hint.steps)
@@ -109,14 +109,16 @@ class Planner:
         steps_raw = data.get("steps", []) if isinstance(data, dict) else []
         steps = []
         for i, s in enumerate(steps_raw):
-            steps.append(PlanStep(
-                index=s.get("index", i),
-                intent=s.get("intent", ""),
-                capability=s.get("capability"),
-                args=s.get("args", {}) or {},
-                depends_on=s.get("depends_on", []) or [],
-                optional=bool(s.get("optional", False)),
-            ))
+            steps.append(
+                PlanStep(
+                    index=s.get("index", i),
+                    intent=s.get("intent", ""),
+                    capability=s.get("capability"),
+                    args=s.get("args", {}) or {},
+                    depends_on=s.get("depends_on", []) or [],
+                    optional=bool(s.get("optional", False)),
+                )
+            )
         return Plan(
             instruction=instruction,
             steps=steps,
@@ -138,8 +140,11 @@ class Planner:
             executor no-ops it. This keeps the rewrite visible without applying a
             rule team-blindly.
         """
-        rules = [r for r in self.memory.capability.get_constraints(kind=ConstraintKind.WORKFLOW_RULE)
-                 if isinstance(r.value, dict) and r.value.get("requires") and r.value.get("before")]
+        rules = [
+            r
+            for r in self.memory.capability.get_constraints(kind=ConstraintKind.WORKFLOW_RULE)
+            if isinstance(r.value, dict) and r.value.get("requires") and r.value.get("before")
+        ]
         if not rules:
             return
         rule = rules[0]
@@ -154,14 +159,25 @@ class Planner:
                 step.capability == "update_issue"
                 and "stateId" in step.args
                 and req_field not in step.args
-                and any(w in (step.intent or "").lower() for w in ("done", "complete", "close", "finish"))
+                and any(
+                    w in (step.intent or "").lower()
+                    for w in ("done", "complete", "close", "finish")
+                )
             )
             target = step.args.get("id", "")
             # Does another step already set this field on the same target? Then
             # depend on it instead of inserting a (possibly overwriting) duplicate.
-            sibling = next((s for s in plan.steps
-                            if s is not step and s.capability == "update_issue"
-                            and s.args.get("id") == target and req_field in s.args), None)
+            sibling = next(
+                (
+                    s
+                    for s in plan.steps
+                    if s is not step
+                    and s.capability == "update_issue"
+                    and s.args.get("id") == target
+                    and req_field in s.args
+                ),
+                None,
+            )
             if transitions and sibling is None:
                 est_step = PlanStep(
                     index=next_index,
@@ -181,9 +197,11 @@ class Planner:
 
         if changed:
             plan.steps = new_steps
-            decisions.append(Decision(
-                stage="plan",
-                summary=f"Rewrote the plan: inserted a '{req_field}' step before the transition",
-                rationale="Learned WORKFLOW_RULE pre-empts a failure the agent hit before "
-                          "(verified against the issue's team at execution time).",
-            ))
+            decisions.append(
+                Decision(
+                    stage="plan",
+                    summary=f"Rewrote the plan: inserted a '{req_field}' step before the transition",
+                    rationale="Learned WORKFLOW_RULE pre-empts a failure the agent hit before "
+                    "(verified against the issue's team at execution time).",
+                )
+            )

@@ -9,7 +9,10 @@ import os
 import pytest
 
 pytestmark = pytest.mark.skipif(
-    not (os.getenv("LINEAR_API_KEY") and (os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENAI_API_KEY"))),
+    not (
+        os.getenv("LINEAR_API_KEY")
+        and (os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENAI_API_KEY"))
+    ),
     reason="live keys not configured (LINEAR_API_KEY + an LLM key)",
 )
 

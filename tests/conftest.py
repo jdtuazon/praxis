@@ -20,8 +20,9 @@ def settings() -> Settings:
 
 
 def make_agent(memory: Memory | None = None, fake: FakeLinear | None = None):
-    return build_agent(settings(), offline=True,
-                       memory=memory or Memory(":memory:"), fake=fake or FakeLinear())
+    return build_agent(
+        settings(), offline=True, memory=memory or Memory(":memory:"), fake=fake or FakeLinear()
+    )
 
 
 @pytest.fixture

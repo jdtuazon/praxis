@@ -8,11 +8,11 @@ the dashboard and machine consumers.
 
 from __future__ import annotations
 
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from rich import box
 
 from .memory import Memory
 from .models import ExecutionReport, ExecutionStatus, StepStatus
@@ -24,12 +24,20 @@ _STATUS_STYLE = {
     ExecutionStatus.ROLLED_BACK: "bold magenta",
 }
 _STEP_STYLE = {
-    StepStatus.SUCCESS: "green", StepStatus.FAILED: "red", StepStatus.SKIPPED: "yellow",
-    StepStatus.ROLLED_BACK: "magenta", StepStatus.PENDING: "dim", StepStatus.RUNNING: "cyan",
+    StepStatus.SUCCESS: "green",
+    StepStatus.FAILED: "red",
+    StepStatus.SKIPPED: "yellow",
+    StepStatus.ROLLED_BACK: "magenta",
+    StepStatus.PENDING: "dim",
+    StepStatus.RUNNING: "cyan",
 }
 _STEP_GLYPH = {
-    StepStatus.SUCCESS: "✓", StepStatus.FAILED: "✗", StepStatus.SKIPPED: "⊘",
-    StepStatus.ROLLED_BACK: "↩", StepStatus.PENDING: "·", StepStatus.RUNNING: "▸",
+    StepStatus.SUCCESS: "✓",
+    StepStatus.FAILED: "✗",
+    StepStatus.SKIPPED: "⊘",
+    StepStatus.ROLLED_BACK: "↩",
+    StepStatus.PENDING: "·",
+    StepStatus.RUNNING: "▸",
 }
 
 
@@ -40,9 +48,15 @@ def render_report(report: ExecutionReport, console: Console | None = None) -> No
     head = Text()
     head.append(f"{report.status.value.upper()}", style=style)
     head.append(f"   {report.summary}", style="dim")
-    c.print(Panel(head, title=f"[bold]Instruction[/]  {report.instruction}",
-                  subtitle=f"plan: {report.plan.source.value} · confidence {report.confidence:.2f} · {report.duration_s:.3f}s",
-                  border_style=style, box=box.ROUNDED))
+    c.print(
+        Panel(
+            head,
+            title=f"[bold]Instruction[/]  {report.instruction}",
+            subtitle=f"plan: {report.plan.source.value} · confidence {report.confidence:.2f} · {report.duration_s:.3f}s",
+            border_style=style,
+            box=box.ROUNDED,
+        )
+    )
 
     # ── steps ────────────────────────────────────────────────────────────────
     t = Table(box=box.SIMPLE_HEAD, expand=True, title="Execution steps", title_justify="left")
@@ -65,7 +79,9 @@ def render_report(report: ExecutionReport, console: Console | None = None) -> No
             notes.append(f"{p.kind}")
         if s.result_summary and not s.error:
             notes.append(s.result_summary[:50])
-        t.add_row(str(s.index), glyph, s.intent, s.capability or "—", str(s.api_calls), " · ".join(notes))
+        t.add_row(
+            str(s.index), glyph, s.intent, s.capability or "—", str(s.api_calls), " · ".join(notes)
+        )
     c.print(t)
 
     # ── decisions ────────────────────────────────────────────────────────────
@@ -96,8 +112,14 @@ def render_report(report: ExecutionReport, console: Console | None = None) -> No
             if a.error:
                 body.append(f"→ {a.error[:80]}", style="red")
             body.append("\n")
-        c.print(Panel(body, title="Capability synthesis (reason → build → test → register)",
-                      border_style="green" if syn.success else "red", box=box.ROUNDED))
+        c.print(
+            Panel(
+                body,
+                title="Capability synthesis (reason → build → test → register)",
+                border_style="green" if syn.success else "red",
+                box=box.ROUNDED,
+            )
+        )
 
     # ── rollback / cleanup ────────────────────────────────────────────────────
     if report.rollback_performed or report.manual_cleanup_required:
@@ -106,7 +128,14 @@ def render_report(report: ExecutionReport, console: Console | None = None) -> No
             body.append(f"↩ compensated: {r}\n", style="magenta")
         for m in report.manual_cleanup_required:
             body.append(f"⚠ manual cleanup: {m}\n", style="yellow")
-        c.print(Panel(body, title="Rollback (best-effort compensation)", border_style="magenta", box=box.ROUNDED))
+        c.print(
+            Panel(
+                body,
+                title="Rollback (best-effort compensation)",
+                border_style="magenta",
+                box=box.ROUNDED,
+            )
+        )
 
     # ── learning ──────────────────────────────────────────────────────────────
     _render_learning(report, c)
@@ -114,9 +143,12 @@ def render_report(report: ExecutionReport, console: Console | None = None) -> No
     # ── memory delta ──────────────────────────────────────────────────────────
     mb, ma = report.memory_before.counts, report.memory_after.counts
     body = Text()
-    body.append(f"executions {mb.executions}→{ma.executions}   "
-                f"capabilities {mb.capabilities}→{ma.capabilities}   "
-                f"constraints {mb.constraints}→{ma.constraints}\n", style="bold")
+    body.append(
+        f"executions {mb.executions}→{ma.executions}   "
+        f"capabilities {mb.capabilities}→{ma.capabilities}   "
+        f"constraints {mb.constraints}→{ma.constraints}\n",
+        style="bold",
+    )
     for line in report.memory_diff.lines:
         body.append(f"  + {line}\n", style="green")
     if report.discovered_constraints:
@@ -132,10 +164,15 @@ def _render_learning(report: ExecutionReport, c: Console) -> None:
     body.append(f"intent-signature: {L.instruction_signature}\n", style="dim")
     body.append(f"run #{L.run_number} of this intent  ·  mode: ", style="bold")
     body.append(f"{L.mode}\n", style="bold cyan")
-    body.append(f"this run:  {L.api_calls} API · {L.llm_calls} LLM · {L.wasted_calls} wasted · {L.failed_steps} failed\n")
+    body.append(
+        f"this run:  {L.api_calls} API · {L.llm_calls} LLM · {L.wasted_calls} wasted · {L.failed_steps} failed\n"
+    )
     if L.baseline_api_calls is not None:
-        body.append(f"first run: {L.baseline_api_calls} API · {L.baseline_llm_calls} LLM · "
-                    f"{L.baseline_wasted_calls} wasted\n", style="dim")
+        body.append(
+            f"first run: {L.baseline_api_calls} API · {L.baseline_llm_calls} LLM · "
+            f"{L.baseline_wasted_calls} wasted\n",
+            style="dim",
+        )
         deltas = []
         if L.wasted_calls_saved:
             deltas.append(f"−{L.wasted_calls_saved} wasted")
@@ -152,17 +189,32 @@ def _render_learning(report: ExecutionReport, c: Console) -> None:
         for a in L.attributions:
             body.append(f"  → {a}\n", style="green")
     border = "green" if (L.wasted_calls_saved or L.api_calls_saved or L.mode != "fresh") else "dim"
-    c.print(Panel(body, title="Learning signal (this run vs first run of this intent)",
-                  border_style=border, box=box.ROUNDED))
+    c.print(
+        Panel(
+            body,
+            title="Learning signal (this run vs first run of this intent)",
+            border_style=border,
+            box=box.ROUNDED,
+        )
+    )
 
 
 def render_memory(memory: Memory, console: Console | None = None) -> None:
     """Inspect the persistent memory state."""
     c = console or Console()
     counts = memory.store.counts()
-    c.print(Panel(Text(f"instructions {counts['instructions']} · executions {counts['executions']} · "
-                       f"capabilities {counts['capabilities']} · active constraints {counts['constraints']}",
-                       style="bold"), title="Memory state", border_style="blue", box=box.ROUNDED))
+    c.print(
+        Panel(
+            Text(
+                f"instructions {counts['instructions']} · executions {counts['executions']} · "
+                f"capabilities {counts['capabilities']} · active constraints {counts['constraints']}",
+                style="bold",
+            ),
+            title="Memory state",
+            border_style="blue",
+            box=box.ROUNDED,
+        )
+    )
 
     caps = memory.capability.list_capabilities()
     if caps:
@@ -172,16 +224,31 @@ def render_memory(memory: Memory, console: Console | None = None) -> None:
         for spec in caps:
             h = memory.capability.capability_health(spec.name)
             rate = f"{h['success_rate']:.0%}" if h["success_rate"] is not None else "—"
-            t.add_row(spec.name, spec.kind.value, spec.source.value, spec.status.value, str(h["attempts"]), rate)
+            t.add_row(
+                spec.name,
+                spec.kind.value,
+                spec.source.value,
+                spec.status.value,
+                str(h["attempts"]),
+                rate,
+            )
         c.print(t)
 
     cons = memory.capability.get_constraints()
     if cons:
-        t = Table(title="Learned constraints", box=box.SIMPLE_HEAD, title_justify="left", expand=True)
+        t = Table(
+            title="Learned constraints", box=box.SIMPLE_HEAD, title_justify="left", expand=True
+        )
         for col in ("kind", "origin", "scope/key", "value", "rewrites plan", "hits"):
             t.add_column(col)
         for con in cons:
             val = str(con.value)
-            t.add_row(con.kind.value, con.origin.value, f"{con.scope}/{con.key}",
-                      val[:48], "yes" if con.rewrites_plan else "", str(con.hits))
+            t.add_row(
+                con.kind.value,
+                con.origin.value,
+                f"{con.scope}/{con.key}",
+                val[:48],
+                "yes" if con.rewrites_plan else "",
+                str(con.hits),
+            )
         c.print(t)

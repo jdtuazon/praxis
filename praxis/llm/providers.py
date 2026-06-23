@@ -19,7 +19,9 @@ class AnthropicLLM(LLM):
     def name(self) -> str:
         return f"anthropic:{self._model}"
 
-    def _generate(self, system: str, prompt: str, max_tokens: int, json_mode: bool) -> tuple[str, int, int]:
+    def _generate(
+        self, system: str, prompt: str, max_tokens: int, json_mode: bool
+    ) -> tuple[str, int, int]:
         sys = system
         if json_mode:
             sys = (system + "\n\nRespond with ONLY valid JSON. No prose, no code fences.").strip()
@@ -29,7 +31,9 @@ class AnthropicLLM(LLM):
             system=sys,
             messages=[{"role": "user", "content": prompt}],
         )
-        text = "".join(block.text for block in resp.content if getattr(block, "type", None) == "text")
+        text = "".join(
+            block.text for block in resp.content if getattr(block, "type", None) == "text"
+        )
         usage = getattr(resp, "usage", None)
         it = getattr(usage, "input_tokens", 0) if usage else 0
         ot = getattr(usage, "output_tokens", 0) if usage else 0
@@ -50,7 +54,9 @@ class OpenAILLM(LLM):
     def name(self) -> str:
         return f"openai:{self._model}"
 
-    def _generate(self, system: str, prompt: str, max_tokens: int, json_mode: bool) -> tuple[str, int, int]:
+    def _generate(
+        self, system: str, prompt: str, max_tokens: int, json_mode: bool
+    ) -> tuple[str, int, int]:
         kwargs: dict = {}
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}

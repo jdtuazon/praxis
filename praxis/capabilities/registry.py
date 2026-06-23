@@ -15,8 +15,9 @@ A *capability* is executable knowledge. Three runtime forms:
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Any
 
 from ..models import AppliedEffect, CallAttribution, CapabilityKind, CapabilitySpec, TransformStep
 from ..platform.base import PlatformError
@@ -48,13 +49,13 @@ class CapabilityError(RuntimeError):
 class ExecutionContext:
     """Run-scoped state threaded through every capability invocation."""
 
-    client: Any                       # LinearClient
-    registry: "CapabilityRegistry"
-    memory: Any = None                # praxis.memory.Memory
+    client: Any  # LinearClient
+    registry: CapabilityRegistry
+    memory: Any = None  # praxis.memory.Memory
     settings: Any = None
     vars: dict[str, Any] = field(default_factory=dict)
     journal: list[AppliedEffect] = field(default_factory=list)
-    dry_run: bool = False             # when True, side-effecting ops are validated, not executed
+    dry_run: bool = False  # when True, side-effecting ops are validated, not executed
     probe_marker: str = "[PRAXIS-PROBE]"
     # run-scoped accounting consumed by the learner / report
     attributions: list[CallAttribution] = field(default_factory=list)
@@ -89,7 +90,7 @@ class Capability:
     """A runtime-bound, executable capability."""
 
     spec: CapabilitySpec
-    func: Optional[Callable[..., Any]] = None  # builtins only
+    func: Callable[..., Any] | None = None  # builtins only
 
     @property
     def name(self) -> str:
@@ -192,7 +193,9 @@ def _t_group(ctx, scope, a):
 def _t_sort(ctx, scope, a):
     src = list(a.get("source", []) or [])
     by = a.get("by", "")
-    return sorted(src, key=lambda x: (_dig(x, by) is None, _dig(x, by)), reverse=bool(a.get("desc")))
+    return sorted(
+        src, key=lambda x: (_dig(x, by) is None, _dig(x, by)), reverse=bool(a.get("desc"))
+    )
 
 
 def _t_count(ctx, scope, a):
@@ -214,7 +217,11 @@ def _t_markdown_table(ctx, scope, a):
     def render_rows(items: list[dict]) -> list[str]:
         rows = ["| " + " | ".join(columns) + " |", "| " + " | ".join(["---"] * len(columns)) + " |"]
         for it in items:
-            rows.append("| " + " | ".join(str(_dig(it, c) if "." in c else it.get(c, "")) for c in columns) + " |")
+            rows.append(
+                "| "
+                + " | ".join(str(_dig(it, c) if "." in c else it.get(c, "")) for c in columns)
+                + " |"
+            )
         return rows
 
     if isinstance(src, dict):  # grouped
@@ -242,7 +249,9 @@ def _t_create_each(ctx, scope, a):
         try:
             results.append(ctx.registry.run(cap, ctx, **call_args))
         except PlatformError as e:  # partial failure within a fan-out is reported, not swallowed
-            errors.append({"item": item.get("identifier", item.get("id")), "error": str(e), "code": e.code})
+            errors.append(
+                {"item": item.get("identifier", item.get("id")), "error": str(e), "code": e.code}
+            )
     return {"results": results, "errors": errors, "succeeded": len(results), "failed": len(errors)}
 
 
@@ -264,13 +273,13 @@ class CapabilityRegistry:
     def register(self, cap: Capability) -> None:
         self._caps[cap.name] = cap
 
-    def register_spec(self, spec: CapabilitySpec, func: Optional[Callable] = None) -> None:
+    def register_spec(self, spec: CapabilitySpec, func: Callable | None = None) -> None:
         self.register(Capability(spec=spec, func=func))
 
     def has(self, name: str) -> bool:
         return name in self._caps
 
-    def get(self, name: str) -> Optional[Capability]:
+    def get(self, name: str) -> Capability | None:
         return self._caps.get(name)
 
     def names(self) -> list[str]:

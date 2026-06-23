@@ -19,7 +19,9 @@ def test_query_variants_collapse():
 
 def test_aggregation_dominates_verb():
     # 'Create a digest' is an aggregation, not a create.
-    assert compute_signature("Create a digest of issues grouped by assignee").startswith("aggregate")
+    assert compute_signature("Create a digest of issues grouped by assignee").startswith(
+        "aggregate"
+    )
     assert compute_signature("Roll up issues into a weekly digest").startswith("aggregate")
 
 

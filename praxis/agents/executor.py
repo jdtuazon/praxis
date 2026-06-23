@@ -11,7 +11,7 @@ step skips its dependents rather than pressing on blindly.
 from __future__ import annotations
 
 import time
-from typing import Any, Optional
+from typing import Any
 
 from ..capabilities.registry import CapabilityRegistry, ExecutionContext
 from ..capabilities.synthesis import Synthesizer
@@ -22,7 +22,6 @@ from ..models import (
     ConstraintKind,
     Decision,
     Plan,
-    PlanStep,
     StepReport,
     StepStatus,
     SynthesisResult,
@@ -33,7 +32,24 @@ from ..platform.base import PlatformError
 RESOLVER_CAPS = {"viewer", "find_team", "find_workflow_state", "find_user"}
 # Error codes that a learned constraint could have pre-empted (→ "wasted" calls).
 LEARNABLE_CODES = {"INVALID_INPUT", "FORBIDDEN", "WORKFLOW_RULE", "RATELIMITED"}
-_STOPWORDS = {"the", "a", "an", "all", "to", "of", "and", "with", "for", "in", "on", "by", "into", "every", "each", "no"}
+_STOPWORDS = {
+    "the",
+    "a",
+    "an",
+    "all",
+    "to",
+    "of",
+    "and",
+    "with",
+    "for",
+    "in",
+    "on",
+    "by",
+    "into",
+    "every",
+    "each",
+    "no",
+}
 
 
 def _entity_key(cap: str, args: dict[str, Any]) -> str:
@@ -96,8 +112,12 @@ class Executor:
         synth_results: list[SynthesisResult] = []
 
         for step in plan.steps:
-            sr = StepReport(index=step.index, intent=step.intent, capability=step.capability,
-                            inserted_by_constraint=step.inserted_by_constraint)
+            sr = StepReport(
+                index=step.index,
+                intent=step.intent,
+                capability=step.capability,
+                inserted_by_constraint=step.inserted_by_constraint,
+            )
 
             if any(d in failed for d in step.depends_on):
                 sr.status = StepStatus.SKIPPED
@@ -111,16 +131,20 @@ class Executor:
             cap_name = step.capability
             if cap_name is None or not self.registry.has(cap_name):
                 kw = derive_keywords(f"{step.intent} {plan.instruction}")
-                res = synthesizer.synthesize(gap_intent=step.intent, instruction=plan.instruction, keywords=kw)
+                res = synthesizer.synthesize(
+                    gap_intent=step.intent, instruction=plan.instruction, keywords=kw
+                )
                 synth_results.append(res)
                 if res.success:
                     cap_name = res.capability_name
                     sr.capability = cap_name
-                    decisions.append(Decision(
-                        stage="synthesize",
-                        summary=f"Synthesized '{cap_name}' for sub-goal: {step.intent}",
-                        rationale=f"No existing capability matched; built+tested in {len(res.attempts)} attempt(s).",
-                    ))
+                    decisions.append(
+                        Decision(
+                            stage="synthesize",
+                            summary=f"Synthesized '{cap_name}' for sub-goal: {step.intent}",
+                            rationale=f"No existing capability matched; built+tested in {len(res.attempts)} attempt(s).",
+                        )
+                    )
                 else:
                     sr.status = StepStatus.FAILED
                     sr.error = f"capability synthesis failed: {res.final_error}"
@@ -132,21 +156,34 @@ class Executor:
                 # The planner reused a previously-synthesized capability → no re-synthesis (transfer).
                 spec = self.memory.capability.get_capability(cap_name)
                 if spec and spec.source == CapabilitySource.SYNTHESIZED:
-                    att = CallAttribution(kind="reused_capability", ref=f"capability/{cap_name}",
-                                          detail="reused a previously-synthesized capability; skipped re-synthesis")
+                    att = CallAttribution(
+                        kind="reused_capability",
+                        ref=f"capability/{cap_name}",
+                        detail="reused a previously-synthesized capability; skipped re-synthesis",
+                    )
                     ctx.note_saving(att)
                     sr.provenance.append(att)
 
             # 2) permission pre-check (switch/skip a forbidden op rather than fail on it)
             if self.memory.capability.permission_forbidden(cap_name):
-                att = CallAttribution(kind="pre_validated", ref=f"constraint:permission/{cap_name}",
-                                      detail="known-forbidden operation avoided")
+                att = CallAttribution(
+                    kind="pre_validated",
+                    ref=f"constraint:permission/{cap_name}",
+                    detail="known-forbidden operation avoided",
+                )
                 ctx.note_saving(att)
                 sr.provenance.append(att)
                 sr.status = StepStatus.SKIPPED
-                sr.result_summary = f"avoided forbidden operation '{cap_name}' (learned permission boundary)"
-                decisions.append(Decision(stage="execute", summary=f"Skipped forbidden op '{cap_name}'",
-                                          rationale="Memory records this token cannot perform it."))
+                sr.result_summary = (
+                    f"avoided forbidden operation '{cap_name}' (learned permission boundary)"
+                )
+                decisions.append(
+                    Decision(
+                        stage="execute",
+                        summary=f"Skipped forbidden op '{cap_name}'",
+                        rationale="Memory records this token cannot perform it.",
+                    )
+                )
                 reports[step.index] = sr
                 continue
 
@@ -161,14 +198,21 @@ class Executor:
                 if not applies:
                     sr.status = StepStatus.SUCCESS
                     sr.result_summary = f"no-op — {why}"
-                    decisions.append(Decision(stage="execute",
-                                              summary="Skipped the inserted precondition step (rule not applicable here)",
-                                              rationale=why))
+                    decisions.append(
+                        Decision(
+                            stage="execute",
+                            summary="Skipped the inserted precondition step (rule not applicable here)",
+                            rationale=why,
+                        )
+                    )
                     ctx.vars[f"step{step.index}"] = {"_noop": True}
                     reports[step.index] = sr
                     continue
-                att = CallAttribution(kind="pre_validated", ref=f"constraint:{step.inserted_by_constraint}",
-                                      detail="set field required by a learned workflow rule (verified for this team)")
+                att = CallAttribution(
+                    kind="pre_validated",
+                    ref=f"constraint:{step.inserted_by_constraint}",
+                    detail="set field required by a learned workflow rule (verified for this team)",
+                )
                 ctx.note_saving(att)
                 sr.provenance.append(att)
 
@@ -178,21 +222,37 @@ class Executor:
             # NON-saving call rather than trusted blindly).
             if cap_name in RESOLVER_CAPS:
                 key = _entity_key(cap_name, args)
-                row = self.memory.capability.constraint_row(kind=ConstraintKind.ENTITY_ID, scope="entity", key=key)
+                row = self.memory.capability.constraint_row(
+                    kind=ConstraintKind.ENTITY_ID, scope="entity", key=key
+                )
                 if row is not None and not self._must_reverify(row):
                     ctx.vars[f"step{step.index}"] = self.memory.store.loads(row["value_json"])
-                    att = CallAttribution(kind="cached_entity", ref=f"entity/{key}",
-                                          detail=f"reused cached result; skipped {cap_name} API call")
+                    att = CallAttribution(
+                        kind="cached_entity",
+                        ref=f"entity/{key}",
+                        detail=f"reused cached result; skipped {cap_name} API call",
+                    )
                     sr.provenance.append(att)
                     ctx.note_saving(att)
-                    self.memory.capability.bump_hit(kind=ConstraintKind.ENTITY_ID, scope="entity", key=key)
+                    self.memory.capability.bump_hit(
+                        kind=ConstraintKind.ENTITY_ID, scope="entity", key=key
+                    )
                     sr.status = StepStatus.SUCCESS
-                    sr.result_summary = f"{_summarize(self.memory.store.loads(row['value_json']))} (from memory)"
+                    sr.result_summary = (
+                        f"{_summarize(self.memory.store.loads(row['value_json']))} (from memory)"
+                    )
                     reports[step.index] = sr
                     continue
-                if row is not None:  # stale-but-likely → re-resolve (counted, not saved); learner re-caches
-                    sr.provenance.append(CallAttribution(kind="reverify", ref=f"entity/{key}",
-                                                         detail="cache present but verification policy required a re-resolve"))
+                if (
+                    row is not None
+                ):  # stale-but-likely → re-resolve (counted, not saved); learner re-caches
+                    sr.provenance.append(
+                        CallAttribution(
+                            kind="reverify",
+                            ref=f"entity/{key}",
+                            detail="cache present but verification policy required a re-resolve",
+                        )
+                    )
 
             # 5) execute
             before = ctx.client.api_calls
@@ -210,18 +270,33 @@ class Executor:
                 sr.status = StepStatus.SUCCESS
                 sr.result_summary = _summarize(result)
                 if cap_name in RESOLVER_CAPS:
-                    ctx.observe_failure({"type": "resolver_success", "key": _entity_key(cap_name, args),
-                                         "value": result, "capability": cap_name})
+                    ctx.observe_failure(
+                        {
+                            "type": "resolver_success",
+                            "key": _entity_key(cap_name, args),
+                            "value": result,
+                            "capability": cap_name,
+                        }
+                    )
                 # surface fan-out partial failures (never silent)
                 if isinstance(result, dict) and result.get("errors"):
                     for err in result["errors"]:
                         if (err.get("code") or "") in LEARNABLE_CODES:
                             ctx.wasted_calls += 1
                             sr.wasted_calls += 1
-                            ctx.observe_failure({"type": "platform_error", "capability": cap_name,
-                                                 "code": err.get("code"), "message": err.get("error"), "args": args})
+                            ctx.observe_failure(
+                                {
+                                    "type": "platform_error",
+                                    "capability": cap_name,
+                                    "code": err.get("code"),
+                                    "message": err.get("error"),
+                                    "args": args,
+                                }
+                            )
                     if result.get("failed"):
-                        sr.result_summary += f" — {result['failed']} item(s) failed (reported, not swallowed)"
+                        sr.result_summary += (
+                            f" — {result['failed']} item(s) failed (reported, not swallowed)"
+                        )
             except PlatformError as e:
                 sr.api_calls = ctx.client.api_calls - before
                 sr.duration_s = round(time.time() - t0, 4)
@@ -231,8 +306,16 @@ class Executor:
                 if (e.code or "") in LEARNABLE_CODES:
                     sr.wasted_calls = 1
                     ctx.wasted_calls += 1
-                    ctx.observe_failure({"type": "platform_error", "capability": cap_name, "code": e.code,
-                                         "message": str(e), "extensions": e.extensions, "args": args})
+                    ctx.observe_failure(
+                        {
+                            "type": "platform_error",
+                            "capability": cap_name,
+                            "code": e.code,
+                            "message": str(e),
+                            "extensions": e.extensions,
+                            "args": args,
+                        }
+                    )
                 if not step.optional:
                     failed.add(step.index)
 
@@ -270,12 +353,16 @@ class Executor:
             return False, f"issue already has {field}={issue.get(field)}"
         rules = self.memory.capability.workflow_rules(team_id) if team_id else []
         if any((r.value or {}).get("requires") == field for r in rules):
-            self.memory.capability.bump_hit(kind=ConstraintKind.WORKFLOW_RULE, scope="team", key=team_id)
+            self.memory.capability.bump_hit(
+                kind=ConstraintKind.WORKFLOW_RULE, scope="team", key=team_id
+            )
             return True, f"team {team_id} requires {field} before this transition"
         return False, f"team {team_id} has no '{field}' rule"
 
     # ── pre-validation against learned constraints (enum + required-field) ───
-    def _prevalidate(self, cap_name: str, args: dict[str, Any], ctx: ExecutionContext, sr: StepReport) -> dict[str, Any]:
+    def _prevalidate(
+        self, cap_name: str, args: dict[str, Any], ctx: ExecutionContext, sr: StepReport
+    ) -> dict[str, Any]:
         if cap_name not in ("create_issue", "update_issue"):
             return args
         entity = "issue"
@@ -290,21 +377,38 @@ class Executor:
             rng = c.value.get("range")
             if isinstance(val, str) and val.lower() in mapping:
                 args = {**args, arg: mapping[val.lower()]}
-                self._note(sr, ctx, f"{entity}.{arg}", f"mapped '{val}' → {args[arg]} from learned enum")
+                self._note(
+                    sr, ctx, f"{entity}.{arg}", f"mapped '{val}' → {args[arg]} from learned enum"
+                )
             elif rng and isinstance(val, int) and not (rng[0] <= val <= rng[1]):
                 clamped = max(rng[0], min(rng[1], val))
                 args = {**args, arg: clamped}
                 # Honest: this overrides an explicit out-of-range value — flag it, don't hide it.
-                sr.error = (sr.error or "") + f"note: clamped {arg} {val}→{clamped} to learned range {rng}; "
-                self._note(sr, ctx, f"{entity}.{arg}", f"clamped {arg} {val}→{clamped} (learned range {rng}); avoided a failed call")
-                self.memory.capability.bump_hit(kind=ConstraintKind.ENUM, scope="field", key=f"{entity}.{arg}")
+                sr.error = (
+                    sr.error or ""
+                ) + f"note: clamped {arg} {val}→{clamped} to learned range {rng}; "
+                self._note(
+                    sr,
+                    ctx,
+                    f"{entity}.{arg}",
+                    f"clamped {arg} {val}→{clamped} (learned range {rng}); avoided a failed call",
+                )
+                self.memory.capability.bump_hit(
+                    kind=ConstraintKind.ENUM, scope="field", key=f"{entity}.{arg}"
+                )
         # Required-field constraints: advise (don't fabricate) when a known-required field is absent.
-        for c in self.memory.capability.get_constraints(scope="mutation", key=cap_name, kind=ConstraintKind.REQUIRED_FIELD):
-            for field in (c.value or []):
+        for c in self.memory.capability.get_constraints(
+            scope="mutation", key=cap_name, kind=ConstraintKind.REQUIRED_FIELD
+        ):
+            for field in c.value or []:
                 if field not in args:
-                    sr.provenance.append(CallAttribution(
-                        kind="pre_validated", ref=f"constraint:mutation/{cap_name}",
-                        detail=f"memory flags '{field}' as required for {cap_name} but it is absent"))
+                    sr.provenance.append(
+                        CallAttribution(
+                            kind="pre_validated",
+                            ref=f"constraint:mutation/{cap_name}",
+                            detail=f"memory flags '{field}' as required for {cap_name} but it is absent",
+                        )
+                    )
         return args
 
     @staticmethod

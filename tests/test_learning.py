@@ -25,7 +25,9 @@ def test_workflow_rule_is_learned_and_rewrites_the_plan():
     # WARM: the agent rewrote its plan — it now inserts an estimate step.
     assert warm.wasted_calls == 0
     assert warm.status == ExecutionStatus.SUCCESS
-    assert any(s.inserted_by_constraint for s in warm.plan.steps), "plan should be rewritten by the learned rule"
+    assert any(s.inserted_by_constraint for s in warm.plan.steps), (
+        "plan should be rewritten by the learned rule"
+    )
     assert warm.learning.wasted_calls_saved == 1
 
 
@@ -63,17 +65,23 @@ def test_workflow_rewrite_preserves_a_legitimate_zero_value():
     next(i for i in fake.store["issues"] if i["identifier"] == "ENG-1")["estimate"] = 0
     make_agent(mem, fake).run("Mark ENG-1 as done")
     eng1 = next(i for i in fake.store["issues"] if i["identifier"] == "ENG-1")
-    assert eng1["estimate"] == 0, "a legitimate 0 estimate must be preserved, not clobbered with the default"
+    assert eng1["estimate"] == 0, (
+        "a legitimate 0 estimate must be preserved, not clobbered with the default"
+    )
 
 
 def test_workflow_rule_is_team_scoped_not_applied_blindly():
     """Regression: a rule learned for Engineering must not mutate a Design issue."""
     mem = Memory(":memory:")
-    make_agent(mem, FakeLinear()).run("Move my in-progress issue to Done")  # learn rule for team_eng
+    make_agent(mem, FakeLinear()).run(
+        "Move my in-progress issue to Done"
+    )  # learn rule for team_eng
     fake = FakeLinear()
     report = make_agent(mem, fake).run("Mark DES-1 as done")  # Design has no such rule
     des1 = next(i for i in fake.store["issues"] if i["identifier"] == "DES-1")
-    assert des1.get("estimate") is None, "Design issue must not be given an estimate it never required"
+    assert des1.get("estimate") is None, (
+        "Design issue must not be given an estimate it never required"
+    )
     assert report.status == ExecutionStatus.SUCCESS
 
 
@@ -122,4 +130,6 @@ def test_synthesized_capability_promoted_after_proven():
     for _ in range(3):
         make_agent(mem, fake).run("Roll up all issues into a triage digest grouped by priority")
     spec = mem.capability.get_capability("issue_digest")
-    assert spec.status.value == "trusted", "a synthesized capability should be promoted after repeated success"
+    assert spec.status.value == "trusted", (
+        "a synthesized capability should be promoted after repeated success"
+    )

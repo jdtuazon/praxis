@@ -8,7 +8,7 @@ it is where every GraphQL request is counted (the primary learning metric).
 
 from __future__ import annotations
 
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 class PlatformError(RuntimeError):
@@ -22,11 +22,11 @@ class PlatformError(RuntimeError):
         self,
         message: str,
         *,
-        code: Optional[str] = None,
-        path: Optional[list[str]] = None,
-        extensions: Optional[dict[str, Any]] = None,
-        status: Optional[int] = None,
-        raw_errors: Optional[list[dict[str, Any]]] = None,
+        code: str | None = None,
+        path: list[str] | None = None,
+        extensions: dict[str, Any] | None = None,
+        status: int | None = None,
+        raw_errors: list[dict[str, Any]] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -36,12 +36,14 @@ class PlatformError(RuntimeError):
         self.raw_errors = raw_errors or []
 
     @classmethod
-    def from_graphql(cls, errors: list[dict[str, Any]], status: Optional[int] = None) -> "PlatformError":
+    def from_graphql(cls, errors: list[dict[str, Any]], status: int | None = None) -> PlatformError:
         first = errors[0] if errors else {}
         ext = first.get("extensions", {}) or {}
         code = ext.get("code") or ext.get("type")
         msg = first.get("message", "GraphQL error")
-        return cls(msg, code=code, path=first.get("path"), extensions=ext, status=status, raw_errors=errors)
+        return cls(
+            msg, code=code, path=first.get("path"), extensions=ext, status=status, raw_errors=errors
+        )
 
     @property
     def is_rate_limit(self) -> bool:

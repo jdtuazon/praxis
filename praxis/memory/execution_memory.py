@@ -8,17 +8,22 @@ all volatile ids at execution time) to avoid re-decomposing from scratch.
 
 from __future__ import annotations
 
-from typing import Optional
-
 from ..models import ExecutionReport, Plan, PlanSource
-from .retrieval import best_match, cosine_similarity
+from .retrieval import cosine_similarity
 from .signature import compute_signature
 from .store import MemoryStore
 
 
 class ReusablePlan:
-    def __init__(self, plan: Plan, execution_id: int, success_count: int, avg_api_calls: float,
-                 similarity: float, origin_instruction: str):
+    def __init__(
+        self,
+        plan: Plan,
+        execution_id: int,
+        success_count: int,
+        avg_api_calls: float,
+        similarity: float,
+        origin_instruction: str,
+    ):
         self.plan = plan
         self.execution_id = execution_id
         self.success_count = success_count
@@ -32,7 +37,9 @@ class ExecutionMemory:
         self.store = store
 
     # ── retrieval (read before planning) ──────────────────────────────────
-    def find_reusable_plan(self, instruction: str, *, min_similarity: float = 0.0) -> Optional[ReusablePlan]:
+    def find_reusable_plan(
+        self, instruction: str, *, min_similarity: float = 0.0
+    ) -> ReusablePlan | None:
         """Return a cached plan SHAPE for this instruction's signature, if any.
 
         Reuse is gated on an exact structured-signature match. Surface-text
@@ -52,7 +59,9 @@ class ExecutionMemory:
         sim = cosine_similarity(instruction, origin)
         if sim < min_similarity:
             return None
-        return ReusablePlan(plan, row["execution_id"], row["success_count"], row["avg_api_calls"], sim, origin)
+        return ReusablePlan(
+            plan, row["execution_id"], row["success_count"], row["avg_api_calls"], sim, origin
+        )
 
     def similar_instructions(self, instruction: str, limit: int = 5) -> list[tuple[str, str]]:
         rows = self.store.query("SELECT DISTINCT instruction, signature FROM executions")
@@ -66,16 +75,18 @@ class ExecutionMemory:
 
     def run_number(self, signature: str) -> int:
         """1-based count of how many times this signature has been executed (incl. this)."""
-        row = self.store.one("SELECT COUNT(*) AS n FROM executions WHERE signature = ?", (signature,))
+        row = self.store.one(
+            "SELECT COUNT(*) AS n FROM executions WHERE signature = ?", (signature,)
+        )
         return int(row["n"]) + 1 if row else 1
 
-    def first_run(self, signature: str) -> Optional["StoredExecution"]:
+    def first_run(self, signature: str) -> StoredExecution | None:
         row = self.store.one(
             "SELECT * FROM executions WHERE signature = ? ORDER BY id ASC LIMIT 1", (signature,)
         )
         return StoredExecution(row) if row else None
 
-    def last_run(self, signature: str) -> Optional["StoredExecution"]:
+    def last_run(self, signature: str) -> StoredExecution | None:
         row = self.store.one(
             "SELECT * FROM executions WHERE signature = ? ORDER BY id DESC LIMIT 1", (signature,)
         )
@@ -96,11 +107,21 @@ class ExecutionMemory:
                 wasted_calls, duration_s, tokens, confidence, synthesized, started_at, finished_at, summary)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
-                report.instruction, sig, report.status.value,
+                report.instruction,
+                sig,
+                report.status.value,
                 self.store.dumps(report.plan.model_dump(mode="json")),
-                report.plan.source.value, report.total_api_calls, report.total_llm_calls,
-                report.wasted_calls, report.duration_s, report.total_tokens, report.confidence,
-                len(report.synthesized_capabilities), report.started_at, report.finished_at, report.summary,
+                report.plan.source.value,
+                report.total_api_calls,
+                report.total_llm_calls,
+                report.wasted_calls,
+                report.duration_s,
+                report.total_tokens,
+                report.confidence,
+                len(report.synthesized_capabilities),
+                report.started_at,
+                report.finished_at,
+                report.summary,
             ),
         )
         exec_id = int(cur.lastrowid)
@@ -111,7 +132,9 @@ class ExecutionMemory:
         self.store.commit()
         return exec_id
 
-    def _upsert_plan_cache(self, signature: str, plan: Plan, execution_id: int, api_calls: int) -> None:
+    def _upsert_plan_cache(
+        self, signature: str, plan: Plan, execution_id: int, api_calls: int
+    ) -> None:
         # Persist the BASE shape only: steps inserted by a learned constraint are
         # stripped so the rewrite is re-derived live from current memory each run.
         # (This keeps the learned constraint the sole cause of the decision change,
@@ -131,12 +154,26 @@ class ExecutionMemory:
             avg = (existing["avg_api_calls"] * existing["success_count"] + api_calls) / sc
             self.store.execute(
                 "UPDATE plan_cache SET plan_json=?, execution_id=?, success_count=?, avg_api_calls=?, updated_at=? WHERE signature=?",
-                (self.store.dumps(shape.model_dump(mode="json")), execution_id, sc, avg, self.store.now(), signature),
+                (
+                    self.store.dumps(shape.model_dump(mode="json")),
+                    execution_id,
+                    sc,
+                    avg,
+                    self.store.now(),
+                    signature,
+                ),
             )
         else:
             self.store.execute(
                 "INSERT INTO plan_cache(signature, plan_json, execution_id, success_count, avg_api_calls, updated_at) VALUES (?,?,?,?,?,?)",
-                (signature, self.store.dumps(shape.model_dump(mode="json")), execution_id, 1, float(api_calls), self.store.now()),
+                (
+                    signature,
+                    self.store.dumps(shape.model_dump(mode="json")),
+                    execution_id,
+                    1,
+                    float(api_calls),
+                    self.store.now(),
+                ),
             )
 
 

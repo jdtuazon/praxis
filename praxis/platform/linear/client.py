@@ -8,7 +8,7 @@ to reason about *real* operations rather than a hard-coded endpoint table.
 from __future__ import annotations
 
 import re
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 from graphql import build_client_schema, get_introspection_query, print_schema
@@ -50,9 +50,9 @@ class LinearClient:
     def __init__(self, transport: GraphQLTransport) -> None:
         self._t = transport
         self.api_calls = 0
-        self._sdl_cache: Optional[str] = None
+        self._sdl_cache: str | None = None
         self._schema_obj = None
-        self._schema_hash: Optional[str] = None
+        self._schema_hash: str | None = None
 
     def reset_counter(self) -> None:
         self.api_calls = 0
@@ -63,7 +63,7 @@ class LinearClient:
         stop=stop_after_attempt(4),
         reraise=True,
     )
-    def execute(self, query: str, variables: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    def execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
         """Run a GraphQL document; return `data`, raising PlatformError on errors."""
         self.api_calls += 1
         resp = self._t.execute(query, variables or {})
@@ -127,7 +127,7 @@ class LinearClient:
         chosen: list[str] = []
         # Root types first.
         for root in ("type Query", "type Mutation"):
-            for name, block in blocks.items():
+            for block in blocks.values():
                 if block.startswith(root):
                     chosen.append(block)
         # Keyword-matched types.

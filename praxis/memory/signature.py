@@ -17,13 +17,56 @@ from __future__ import annotations
 import re
 
 _VERBS = [
-    ("aggregate", ["group", "summar", "digest", "roll up", "rollup", "roll-up", "report", "breakdown", "rebalance"]),
+    (
+        "aggregate",
+        [
+            "group",
+            "summar",
+            "digest",
+            "roll up",
+            "rollup",
+            "roll-up",
+            "report",
+            "breakdown",
+            "rebalance",
+        ],
+    ),
     ("archive", ["archive"]),
     ("delete", ["delete", "remove permanently", "purge"]),
     ("comment", ["comment", "leave a note", "ping", "remind"]),
-    ("update", ["update", "change", "set", "move", "assign", "reassign", "close", "complete", "mark", "transition", "prioriti"]),
+    (
+        "update",
+        [
+            "update",
+            "change",
+            "set",
+            "move",
+            "assign",
+            "reassign",
+            "close",
+            "complete",
+            "mark",
+            "transition",
+            "prioriti",
+        ],
+    ),
     ("create", ["create", "make", "file", "add", "open a", "log a", "raise", "new "]),
-    ("query", ["find", "list", "show", "get", "search", "count", "which", "what", "how many", "fetch", "look up"]),
+    (
+        "query",
+        [
+            "find",
+            "list",
+            "show",
+            "get",
+            "search",
+            "count",
+            "which",
+            "what",
+            "how many",
+            "fetch",
+            "look up",
+        ],
+    ),
 ]
 
 _ENTITIES = [
@@ -33,12 +76,21 @@ _ENTITIES = [
 ]
 
 _PREDICATES = [
-    ("assignee:null", ["no assignee", "nobody", "unassigned", "without an assignee", "not assigned", "no one"]),
+    (
+        "assignee:null",
+        ["no assignee", "nobody", "unassigned", "without an assignee", "not assigned", "no one"],
+    ),
     ("assignee:me", ["assigned to me", "my ", "mine"]),
-    ("state:open", ["open", "active", "in progress", "in-progress", "not done", "unstarted", "todo"]),
+    (
+        "state:open",
+        ["open", "active", "in progress", "in-progress", "not done", "unstarted", "todo"],
+    ),
     ("state:done", ["done", "completed", "closed", "finished"]),
     ("age:stale", ["stale", "old", "no activity", "days", "weeks", "untouched", "inactive"]),
-    ("priority:high", ["urgent", "high priority", "high-priority", "p1", "p0", "critical", "important"]),
+    (
+        "priority:high",
+        ["urgent", "high priority", "high-priority", "p1", "p0", "critical", "important"],
+    ),
     ("group:assignee", ["by assignee", "per assignee", "grouped by assignee"]),
     ("group:priority", ["by priority", "per priority", "grouped by priority"]),
     ("group:team", ["by team", "per team", "grouped by team"]),
@@ -85,14 +137,23 @@ def compute_signature(instruction: str) -> str:
         verb = "aggregate"
     # "add a comment/note" is a comment, not a create (the create-ish "add" only
     # means create when an issue-like object is being created).
-    if verb == "create" and any(w in text for w in ("comment", " note ")) \
-            and not any(n in text for n in ("bug", "issue", "ticket", "task", "story", "defect", "project")):
+    if (
+        verb == "create"
+        and any(w in text for w in ("comment", " note "))
+        and not any(
+            n in text for n in ("bug", "issue", "ticket", "task", "story", "defect", "project")
+        )
+    ):
         verb = "comment"
     entity = _earliest(text, _ENTITIES) or "issue"
     predicates = sorted(set(_match_all(text, _PREDICATES)))
     # Mutation-field tags only matter for write verbs; queries/aggregations are
     # characterised by their predicates, not the fields they touch.
-    fields = sorted(set(_match_all(text, _FIELDS))) if verb in {"create", "update", "comment", "archive"} else []
+    fields = (
+        sorted(set(_match_all(text, _FIELDS)))
+        if verb in {"create", "update", "comment", "archive"}
+        else []
+    )
 
     parts = [verb, entity]
     if predicates:

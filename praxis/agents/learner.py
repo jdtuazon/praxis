@@ -35,21 +35,40 @@ class Learner:
         self.settings = settings
 
     # ── learning comparison (the measurable signal) ────────────────────────
-    def compare(self, plan: Plan, *, api_calls: int, llm_calls: int, wasted_calls: int,
-                duration_s: float, failed_steps: int, synthesized: int, ctx: ExecutionContext) -> LearningComparison:
+    def compare(
+        self,
+        plan: Plan,
+        *,
+        api_calls: int,
+        llm_calls: int,
+        wasted_calls: int,
+        duration_s: float,
+        failed_steps: int,
+        synthesized: int,
+        ctx: ExecutionContext,
+    ) -> LearningComparison:
         sig = plan.intent_signature
         run_number = self.memory.execution.run_number(sig)
         baseline = self.memory.execution.first_run(sig)
-        mode = {"reused": "reuse", "adapted": "transfer", "fresh": "fresh"}.get(plan.source.value, "fresh")
+        mode = {"reused": "reuse", "adapted": "transfer", "fresh": "fresh"}.get(
+            plan.source.value, "fresh"
+        )
         # Reusing a capability synthesized for a *related* instruction is transfer,
         # even when this exact signature is new.
         if mode == "fresh" and any(a.kind == "reused_capability" for a in ctx.attributions):
             mode = "transfer"
 
         cmp = LearningComparison(
-            instruction_signature=sig, mode=mode, run_number=run_number, is_repeat=run_number > 1,
-            api_calls=api_calls, llm_calls=llm_calls, wasted_calls=wasted_calls,
-            duration_s=round(duration_s, 4), failed_steps=failed_steps, synthesized=synthesized,
+            instruction_signature=sig,
+            mode=mode,
+            run_number=run_number,
+            is_repeat=run_number > 1,
+            api_calls=api_calls,
+            llm_calls=llm_calls,
+            wasted_calls=wasted_calls,
+            duration_s=round(duration_s, 4),
+            failed_steps=failed_steps,
+            synthesized=synthesized,
             saved_calls=list(ctx.attributions),
         )
         if baseline:
@@ -61,7 +80,9 @@ class Learner:
             cmp.llm_calls_saved = max(0, baseline.llm_calls - llm_calls)
             cmp.wasted_calls_saved = max(0, baseline.wasted_calls - wasted_calls)
             if baseline.duration_s > 0:
-                cmp.speedup_pct = round(100 * (baseline.duration_s - duration_s) / baseline.duration_s, 1)
+                cmp.speedup_pct = round(
+                    100 * (baseline.duration_s - duration_s) / baseline.duration_s, 1
+                )
 
         # human-readable attributions
         for att in ctx.attributions:
@@ -71,23 +92,32 @@ class Learner:
                 f"avoided {cmp.wasted_calls_saved} previously-wasted call(s) via learned constraints"
             )
         if mode == "transfer":
-            cmp.attributions.append("transfer: applied knowledge from a related instruction's prior runs")
+            cmp.attributions.append(
+                "transfer: applied knowledge from a related instruction's prior runs"
+            )
         return cmp
 
     # ── knowledge extraction (writes to memory) ─────────────────────────────
-    def learn(self, ctx: ExecutionContext, *, execution_id: int, plan: Plan, steps: list[StepReport]) -> list[str]:
+    def learn(
+        self, ctx: ExecutionContext, *, execution_id: int, plan: Plan, steps: list[StepReport]
+    ) -> list[str]:
         discovered: list[str] = []
 
         # 1) constraints from observations (failures + resolver successes)
         for obs in ctx.observations:
             if obs.get("type") == "resolver_success":
-                self.memory.capability.upsert_constraint(Constraint(
-                    kind=ConstraintKind.ENTITY_ID, origin=ConstraintOrigin.RUNTIME_LEARNED,
-                    scope="entity", key=obs["key"], value=obs["value"],
-                    description=f"cached {obs['capability']} result",
-                    verification_policy=VerificationPolicy.TRUST,
-                    discovered_from_execution=execution_id,
-                ))
+                self.memory.capability.upsert_constraint(
+                    Constraint(
+                        kind=ConstraintKind.ENTITY_ID,
+                        origin=ConstraintOrigin.RUNTIME_LEARNED,
+                        scope="entity",
+                        key=obs["key"],
+                        value=obs["value"],
+                        description=f"cached {obs['capability']} result",
+                        verification_policy=VerificationPolicy.TRUST,
+                        discovered_from_execution=execution_id,
+                    )
+                )
             elif obs.get("type") == "platform_error":
                 c = self._constraint_from_error(obs, execution_id)
                 if c:
@@ -107,9 +137,11 @@ class Learner:
             if not s.capability or s.status in (StepStatus.SKIPPED, StepStatus.ROLLED_BACK):
                 continue
             self.memory.capability.record_capability_use(
-                s.capability, plan.intent_signature,
+                s.capability,
+                plan.intent_signature,
                 success=(s.status == StepStatus.SUCCESS),
-                duration=s.duration_s, api_calls=s.api_calls,
+                duration=s.duration_s,
+                api_calls=s.api_calls,
             )
             self._maybe_promote(s.capability, discovered)
             self._maybe_demote(s.capability, s.status, discovered)
@@ -122,11 +154,17 @@ class Learner:
         if code == "WORKFLOW_RULE":
             team = ext.get("team") or args.get("teamId") or "unknown"
             return Constraint(
-                kind=ConstraintKind.WORKFLOW_RULE, origin=ConstraintOrigin.RUNTIME_LEARNED,
-                scope="team", key=team, rewrites_plan=True,
-                value={"requires": ext.get("requires", "estimate"),
-                       "before": ext.get("before_state_type", "completed"), "default_estimate": 1},
-                description=f"{ext.get('requires','estimate')} required before {ext.get('before_state_type','completed')} transition",
+                kind=ConstraintKind.WORKFLOW_RULE,
+                origin=ConstraintOrigin.RUNTIME_LEARNED,
+                scope="team",
+                key=team,
+                rewrites_plan=True,
+                value={
+                    "requires": ext.get("requires", "estimate"),
+                    "before": ext.get("before_state_type", "completed"),
+                    "default_estimate": 1,
+                },
+                description=f"{ext.get('requires', 'estimate')} required before {ext.get('before_state_type', 'completed')} transition",
                 discovered_from_execution=execution_id,
             )
         if code == "INVALID_INPUT" and ext.get("field") == "priority" and ext.get("allowed"):
@@ -135,36 +173,52 @@ class Learner:
             value = dict(existing.value) if existing and isinstance(existing.value, dict) else {}
             value["range"] = [allowed.get("min", 0), allowed.get("max", 4)]
             return Constraint(
-                kind=ConstraintKind.ENUM, origin=ConstraintOrigin.RUNTIME_LEARNED,
-                scope="field", key="issue.priority", value=value,
+                kind=ConstraintKind.ENUM,
+                origin=ConstraintOrigin.RUNTIME_LEARNED,
+                scope="field",
+                key="issue.priority",
+                value=value,
                 description=f"priority must be in {value['range']}",
                 discovered_from_execution=execution_id,
             )
         if code == "INVALID_INPUT" and ext.get("field"):
             return Constraint(
-                kind=ConstraintKind.REQUIRED_FIELD, origin=ConstraintOrigin.RUNTIME_LEARNED,
-                scope="mutation", key=obs.get("capability", "unknown"), value=[ext["field"]],
-                description=f"field '{ext['field']}' is required/invalid: {obs.get('message','')[:80]}",
+                kind=ConstraintKind.REQUIRED_FIELD,
+                origin=ConstraintOrigin.RUNTIME_LEARNED,
+                scope="mutation",
+                key=obs.get("capability", "unknown"),
+                value=[ext["field"]],
+                description=f"field '{ext['field']}' is required/invalid: {obs.get('message', '')[:80]}",
                 discovered_from_execution=execution_id,
             )
         if code == "FORBIDDEN":
             op = ext.get("operation") or obs.get("capability", "unknown")
             return Constraint(
-                kind=ConstraintKind.PERMISSION, origin=ConstraintOrigin.RUNTIME_LEARNED,
-                scope="mutation", key=op, value="forbidden",
+                kind=ConstraintKind.PERMISSION,
+                origin=ConstraintOrigin.RUNTIME_LEARNED,
+                scope="mutation",
+                key=op,
+                value="forbidden",
                 description=f"token may not perform '{op}'",
                 discovered_from_execution=execution_id,
             )
         if code == "RATELIMITED":
             return Constraint(
-                kind=ConstraintKind.RATE_LIMIT, origin=ConstraintOrigin.RUNTIME_LEARNED,
-                scope="global", key="writes", value={"retry_after": ext.get("retryAfter", 2)},
-                description="write rate limit observed", verification_policy=VerificationPolicy.REFETCH_TTL,
-                ttl_seconds=600, discovered_from_execution=execution_id,
+                kind=ConstraintKind.RATE_LIMIT,
+                origin=ConstraintOrigin.RUNTIME_LEARNED,
+                scope="global",
+                key="writes",
+                value={"retry_after": ext.get("retryAfter", 2)},
+                description="write rate limit observed",
+                verification_policy=VerificationPolicy.REFETCH_TTL,
+                ttl_seconds=600,
+                discovered_from_execution=execution_id,
             )
         return None
 
-    def _learn_priority_vocab(self, ctx: ExecutionContext, execution_id: int, discovered: list[str]) -> None:
+    def _learn_priority_vocab(
+        self, ctx: ExecutionContext, execution_id: int, discovered: list[str]
+    ) -> None:
         observed: dict[str, int] = {}
         for v in ctx.vars.values():
             for issue in _iter_issues(v):
@@ -177,8 +231,15 @@ class Learner:
         value = dict(existing.value) if existing and isinstance(existing.value, dict) else {}
         mp = dict(value.get("map") or {})
         # natural-language synonyms → codes (the workspace's vocabulary)
-        synonyms = {"urgent": "urgent", "critical": "urgent", "p1": "urgent",
-                    "high": "high", "medium": "medium", "low": "low", "no priority": "none"}
+        synonyms = {
+            "urgent": "urgent",
+            "critical": "urgent",
+            "p1": "urgent",
+            "high": "high",
+            "medium": "medium",
+            "low": "low",
+            "no priority": "none",
+        }
         for label, code in observed.items():
             mp[label] = code
             for syn, canon in synonyms.items():
@@ -187,20 +248,29 @@ class Learner:
         if mp != (value.get("map") or {}):
             value["map"] = mp
             value.setdefault("range", [0, 4])
-            self.memory.capability.upsert_constraint(Constraint(
-                kind=ConstraintKind.ENUM, origin=ConstraintOrigin.RUNTIME_LEARNED,
-                scope="field", key="issue.priority", value=value,
-                description="learned priority vocabulary from responses",
-                discovered_from_execution=execution_id,
-            ))
-            discovered.append("enum: field/issue.priority — learned priority vocabulary from responses")
+            self.memory.capability.upsert_constraint(
+                Constraint(
+                    kind=ConstraintKind.ENUM,
+                    origin=ConstraintOrigin.RUNTIME_LEARNED,
+                    scope="field",
+                    key="issue.priority",
+                    value=value,
+                    description="learned priority vocabulary from responses",
+                    discovered_from_execution=execution_id,
+                )
+            )
+            discovered.append(
+                "enum: field/issue.priority — learned priority vocabulary from responses"
+            )
 
     def _maybe_promote(self, capability: str, discovered: list[str]) -> None:
         spec = self.memory.capability.get_capability(capability)
         if not spec or spec.source != CapabilitySource.SYNTHESIZED:
             return
         if spec.status == CapabilityStatus.PROBATIONARY:
-            if self.memory.capability.success_count(capability) >= int(getattr(self.settings, "capability_promote_after", 2)):
+            if self.memory.capability.success_count(capability) >= int(
+                getattr(self.settings, "capability_promote_after", 2)
+            ):
                 self.memory.capability.set_status(capability, CapabilityStatus.TRUSTED)
                 discovered.append(f"promoted capability '{capability}' probationary → trusted")
 
@@ -208,11 +278,15 @@ class Learner:
         if status != StepStatus.FAILED:
             return
         spec = self.memory.capability.get_capability(capability)
-        if spec and spec.source == CapabilitySource.SYNTHESIZED and spec.status in (
-            CapabilityStatus.TRUSTED, CapabilityStatus.PROBATIONARY
+        if (
+            spec
+            and spec.source == CapabilitySource.SYNTHESIZED
+            and spec.status in (CapabilityStatus.TRUSTED, CapabilityStatus.PROBATIONARY)
         ):
             self.memory.capability.set_status(capability, CapabilityStatus.DEMOTED)
-            discovered.append(f"demoted capability '{capability}' → needs re-test (failed in the wild)")
+            discovered.append(
+                f"demoted capability '{capability}' → needs re-test (failed in the wild)"
+            )
 
 
 def _iter_issues(value: Any):

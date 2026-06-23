@@ -48,7 +48,9 @@ def create_app(*, offline: bool = True) -> FastAPI:
     }
 
     def agent():
-        return build_agent(settings, offline=state["offline"], memory=state["memory"], fake=state["fake"])
+        return build_agent(
+            settings, offline=state["offline"], memory=state["memory"], fake=state["fake"]
+        )
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
@@ -65,12 +67,30 @@ def create_app(*, offline: bool = True) -> FastAPI:
         caps = []
         for spec in m.capability.list_capabilities():
             h = m.capability.capability_health(spec.name)
-            caps.append({"name": spec.name, "kind": spec.kind.value, "source": spec.source.value,
-                         "status": spec.status.value, "attempts": h["attempts"],
-                         "success_rate": h["success_rate"], "description": spec.description})
-        cons = [{"kind": c.kind.value, "origin": c.origin.value, "scope": c.scope, "key": c.key,
-                 "value": c.value, "rewrites_plan": c.rewrites_plan, "hits": c.hits,
-                 "description": c.description} for c in m.capability.get_constraints()]
+            caps.append(
+                {
+                    "name": spec.name,
+                    "kind": spec.kind.value,
+                    "source": spec.source.value,
+                    "status": spec.status.value,
+                    "attempts": h["attempts"],
+                    "success_rate": h["success_rate"],
+                    "description": spec.description,
+                }
+            )
+        cons = [
+            {
+                "kind": c.kind.value,
+                "origin": c.origin.value,
+                "scope": c.scope,
+                "key": c.key,
+                "value": c.value,
+                "rewrites_plan": c.rewrites_plan,
+                "hits": c.hits,
+                "description": c.description,
+            }
+            for c in m.capability.get_constraints()
+        ]
         return JSONResponse({"counts": m.store.counts(), "capabilities": caps, "constraints": cons})
 
     @app.post("/api/reset")
@@ -91,16 +111,19 @@ def create_app(*, offline: bool = True) -> FastAPI:
 
     @app.get("/api/meta")
     def meta() -> JSONResponse:
-        return JSONResponse({
-            "mode": "offline" if state["offline"] else "live",
-            "platform": "Linear",
-            "llm_ready": settings.llm_ready(),
-            "platform_ready": settings.platform_ready(),
-        })
+        return JSONResponse(
+            {
+                "mode": "offline" if state["offline"] else "live",
+                "platform": "Linear",
+                "llm_ready": settings.llm_ready(),
+                "platform_ready": settings.platform_ready(),
+            }
+        )
 
     @app.get("/api/examples")
     def examples() -> JSONResponse:
         from ..demo import DEMO_STEPS
+
         return JSONResponse([{"label": label, "instruction": instr} for label, instr in DEMO_STEPS])
 
     @app.get("/api/bench")

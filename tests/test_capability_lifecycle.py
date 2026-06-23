@@ -17,7 +17,9 @@ from praxis.models import (
 
 
 def _learn_once(learner, mem, status):
-    ctx = ExecutionContext(client=None, registry=None, memory=mem, settings=Settings(llm_provider="scripted"))
+    ctx = ExecutionContext(
+        client=None, registry=None, memory=mem, settings=Settings(llm_provider="scripted")
+    )
     plan = Plan(instruction="x", intent_signature="sig")
     steps = [StepReport(index=0, intent="use foo", capability="foo", status=status)]
     learner.learn(ctx, execution_id=1, plan=plan, steps=steps)
@@ -25,9 +27,14 @@ def _learn_once(learner, mem, status):
 
 def test_rolled_back_runs_do_not_promote_or_inflate_health():
     mem = Memory(":memory:")
-    mem.capability.save_capability(CapabilitySpec(
-        name="foo", kind=CapabilityKind.COMPOSITE, source=CapabilitySource.SYNTHESIZED,
-        status=CapabilityStatus.PROBATIONARY))
+    mem.capability.save_capability(
+        CapabilitySpec(
+            name="foo",
+            kind=CapabilityKind.COMPOSITE,
+            source=CapabilitySource.SYNTHESIZED,
+            status=CapabilityStatus.PROBATIONARY,
+        )
+    )
     learner = Learner(mem, Settings(llm_provider="scripted"))
 
     # Two failed-then-rolled-back runs must NOT promote the capability.
@@ -41,9 +48,14 @@ def test_rolled_back_runs_do_not_promote_or_inflate_health():
 
 def test_clean_successes_still_promote():
     mem = Memory(":memory:")
-    mem.capability.save_capability(CapabilitySpec(
-        name="foo", kind=CapabilityKind.COMPOSITE, source=CapabilitySource.SYNTHESIZED,
-        status=CapabilityStatus.PROBATIONARY))
+    mem.capability.save_capability(
+        CapabilitySpec(
+            name="foo",
+            kind=CapabilityKind.COMPOSITE,
+            source=CapabilitySource.SYNTHESIZED,
+            status=CapabilityStatus.PROBATIONARY,
+        )
+    )
     learner = Learner(mem, Settings(llm_provider="scripted"))
     _learn_once(learner, mem, StepStatus.SUCCESS)
     _learn_once(learner, mem, StepStatus.SUCCESS)
@@ -52,9 +64,14 @@ def test_clean_successes_still_promote():
 
 def test_real_failure_demotes_and_does_not_promote():
     mem = Memory(":memory:")
-    mem.capability.save_capability(CapabilitySpec(
-        name="foo", kind=CapabilityKind.COMPOSITE, source=CapabilitySource.SYNTHESIZED,
-        status=CapabilityStatus.TRUSTED))
+    mem.capability.save_capability(
+        CapabilitySpec(
+            name="foo",
+            kind=CapabilityKind.COMPOSITE,
+            source=CapabilitySource.SYNTHESIZED,
+            status=CapabilityStatus.TRUSTED,
+        )
+    )
     learner = Learner(mem, Settings(llm_provider="scripted"))
     _learn_once(learner, mem, StepStatus.FAILED)
     assert mem.capability.get_capability("foo").status == CapabilityStatus.DEMOTED

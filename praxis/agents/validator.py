@@ -27,13 +27,18 @@ class Validator:
         self.registry = registry
         self.memory = memory
 
-    def assess(self, plan: Plan, steps: list[StepReport]) -> tuple[ExecutionStatus, float, list[str]]:
+    def assess(
+        self, plan: Plan, steps: list[StepReport]
+    ) -> tuple[ExecutionStatus, float, list[str]]:
         required = [s for s in plan.steps if not s.optional]
         required_idx = {s.index for s in required}
-        by_idx = {s.index: s for s in steps}
 
         successes = [s for s in steps if s.status == StepStatus.SUCCESS]
-        req_failed = [s for s in steps if s.index in required_idx and s.status in (StepStatus.FAILED, StepStatus.SKIPPED)]
+        req_failed = [
+            s
+            for s in steps
+            if s.index in required_idx and s.status in (StepStatus.FAILED, StepStatus.SKIPPED)
+        ]
 
         if not req_failed:
             status = ExecutionStatus.SUCCESS
@@ -44,7 +49,11 @@ class Validator:
 
         # ── confidence ──────────────────────────────────────────────────────
         notes: list[str] = []
-        conf = {ExecutionStatus.SUCCESS: 0.95, ExecutionStatus.PARTIAL: 0.55, ExecutionStatus.FAILED: 0.15}[status]
+        conf = {
+            ExecutionStatus.SUCCESS: 0.95,
+            ExecutionStatus.PARTIAL: 0.55,
+            ExecutionStatus.FAILED: 0.15,
+        }[status]
         if req_failed:
             notes.append(f"{len(req_failed)} required step(s) did not succeed")
         wasted = sum(s.wasted_calls for s in steps)
@@ -56,9 +65,15 @@ class Validator:
             if not s.capability:
                 continue
             spec = self.memory.capability.get_capability(s.capability)
-            if spec and spec.source == CapabilitySource.SYNTHESIZED and spec.status == CapabilityStatus.PROBATIONARY:
+            if (
+                spec
+                and spec.source == CapabilitySource.SYNTHESIZED
+                and spec.status == CapabilityStatus.PROBATIONARY
+            ):
                 conf -= 0.1
-                notes.append(f"used probationary capability '{s.capability}' (not yet proven on repeated runs)")
+                notes.append(
+                    f"used probationary capability '{s.capability}' (not yet proven on repeated runs)"
+                )
         if plan.source.value in ("reused", "adapted"):
             conf += 0.03
             notes.append(f"plan {plan.source.value} from prior successful execution")
@@ -94,9 +109,11 @@ def compensate(ctx: ExecutionContext) -> tuple[list[str], list[str], list[Decisi
             effect.compensation_error = str(e)
             manual_cleanup.append(f"{effect.description} (compensation FAILED: {e})")
     if rolled_back or manual_cleanup:
-        decisions.append(Decision(
-            stage="validate",
-            summary=f"Rolled back {len(rolled_back)} effect(s); {len(manual_cleanup)} need manual cleanup",
-            rationale="Required step failed after side effects were applied → best-effort compensation.",
-        ))
+        decisions.append(
+            Decision(
+                stage="validate",
+                summary=f"Rolled back {len(rolled_back)} effect(s); {len(manual_cleanup)} need manual cleanup",
+                rationale="Required step failed after side effects were applied → best-effort compensation.",
+            )
+        )
     return rolled_back, manual_cleanup, decisions

@@ -29,14 +29,18 @@ class Memory:
     # ── snapshots / diffs ──────────────────────────────────────────────────
     def snapshot(self) -> MemorySnapshot:
         counts = self.store.counts()
-        cap_names = [r["name"] for r in self.store.query("SELECT name FROM capabilities ORDER BY name")]
+        cap_names = [
+            r["name"] for r in self.store.query("SELECT name FROM capabilities ORDER BY name")
+        ]
         con_keys = [
             f"{r['scope']}/{r['key']}"
             for r in self.store.query(
                 "SELECT scope, key FROM constraints WHERE invalidated_by IS NULL ORDER BY scope, key"
             )
         ]
-        return MemorySnapshot(counts=MemoryCounts(**counts), capability_names=cap_names, constraint_keys=con_keys)
+        return MemorySnapshot(
+            counts=MemoryCounts(**counts), capability_names=cap_names, constraint_keys=con_keys
+        )
 
     @staticmethod
     def diff(before: MemorySnapshot, after: MemorySnapshot) -> MemoryDiff:
@@ -61,8 +65,15 @@ class Memory:
         self.store.commit()
 
     def reset(self) -> None:
-        for t in ("instructions", "executions", "plan_cache", "capabilities",
-                  "capability_stats", "constraints", "memory_digests"):
+        for t in (
+            "instructions",
+            "executions",
+            "plan_cache",
+            "capabilities",
+            "capability_stats",
+            "constraints",
+            "memory_digests",
+        ):
             self.store.execute(f"DELETE FROM {t}")
         self.store.commit()
 

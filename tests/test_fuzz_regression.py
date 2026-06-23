@@ -9,7 +9,6 @@ counts sane, no exceptions)."""
 import itertools
 
 import pytest
-
 from conftest import make_agent
 
 from praxis.memory import Memory
@@ -59,8 +58,16 @@ def _check_report(report) -> None:
         assert s.api_calls >= 0
         assert s.status in set(StepStatus)
     # no silent half-completion: a non-success run must explain itself
-    if report.status in (ExecutionStatus.PARTIAL, ExecutionStatus.FAILED, ExecutionStatus.ROLLED_BACK):
-        assert any(s.error for s in report.steps) or report.manual_cleanup_required or report.rollback_steps
+    if report.status in (
+        ExecutionStatus.PARTIAL,
+        ExecutionStatus.FAILED,
+        ExecutionStatus.ROLLED_BACK,
+    ):
+        assert (
+            any(s.error for s in report.steps)
+            or report.manual_cleanup_required
+            or report.rollback_steps
+        )
     # a non-success that applied side effects must have compensated or flagged cleanup
     assert report.model_dump_json()
 

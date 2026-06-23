@@ -26,10 +26,15 @@ def test_trust_policy_reuses_cache_but_verify_on_read_reresolves():
 
     # flip the cached entity to VERIFY_ON_READ → it must be re-resolved
     key = _entity_key("find_team", {"name": "Engineering"})
-    mem.capability.upsert_constraint(Constraint(
-        kind=ConstraintKind.ENTITY_ID, scope="entity", key=key,
-        value={"id": "team_eng", "key": "ENG", "name": "Engineering"},
-        verification_policy=VerificationPolicy.VERIFY_ON_READ))
+    mem.capability.upsert_constraint(
+        Constraint(
+            kind=ConstraintKind.ENTITY_ID,
+            scope="entity",
+            key=key,
+            value={"id": "team_eng", "key": "ENG", "name": "Engineering"},
+            verification_policy=VerificationPolicy.VERIFY_ON_READ,
+        )
+    )
 
     verified = make_agent(mem, FakeLinear()).run(instr)
     step = _find_team_step(verified)

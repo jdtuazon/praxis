@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+from .primitives import register_builtins
 from .registry import (
+    WHITELISTED_TRANSFORMS,
     Capability,
     CapabilityError,
     CapabilityRegistry,
     ExecutionContext,
-    WHITELISTED_TRANSFORMS,
 )
-from .primitives import register_builtins
 from .synthesis import Synthesizer
 
 __all__ = [

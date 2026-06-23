@@ -18,7 +18,9 @@ class Compactor:
 
     def compact(self, *, keep_recent: int = 10) -> list[str]:
         notes: list[str] = []
-        sigs = [r["signature"] for r in self.store.query("SELECT DISTINCT signature FROM executions")]
+        sigs = [
+            r["signature"] for r in self.store.query("SELECT DISTINCT signature FROM executions")
+        ]
         for sig in sigs:
             rows = self.store.query(
                 "SELECT * FROM executions WHERE signature = ? ORDER BY id ASC", (sig,)
@@ -30,7 +32,9 @@ class Compactor:
             foldable = rows[1:-keep_recent]
             # Never delete a row still referenced by the plan_cache (it backs the
             # reusable plan's provenance + similarity scoring in find_reusable_plan).
-            referenced = {r["execution_id"] for r in self.store.query("SELECT execution_id FROM plan_cache")}
+            referenced = {
+                r["execution_id"] for r in self.store.query("SELECT execution_id FROM plan_cache")
+            }
             foldable = [r for r in foldable if r["id"] not in referenced]
             if not foldable:
                 continue
@@ -43,7 +47,13 @@ class Compactor:
             )
             self.store.execute(
                 "INSERT INTO memory_digests(signature, summary, covers_from, covers_to, created_at) VALUES (?,?,?,?,?)",
-                (sig, summary, foldable[0]["started_at"], foldable[-1]["finished_at"], self.store.now()),
+                (
+                    sig,
+                    summary,
+                    foldable[0]["started_at"],
+                    foldable[-1]["finished_at"],
+                    self.store.now(),
+                ),
             )
             ids = [str(r["id"]) for r in foldable]
             self.store.execute(
@@ -54,4 +64,7 @@ class Compactor:
         return notes
 
     def digests(self) -> list[str]:
-        return [r["summary"] for r in self.store.query("SELECT summary FROM memory_digests ORDER BY id DESC")]
+        return [
+            r["summary"]
+            for r in self.store.query("SELECT summary FROM memory_digests ORDER BY id DESC")
+        ]

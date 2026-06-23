@@ -19,8 +19,6 @@ This is the "real" synthesis the assignment contrasts with a lookup table:
 
 from __future__ import annotations
 
-from typing import Optional
-
 from ..llm.base import LLM, LLMError
 from ..models import (
     CapabilityKind,
@@ -84,11 +82,13 @@ class Synthesizer:
         self.settings = settings
 
     # ── public entry ─────────────────────────────────────────────────────────
-    def synthesize(self, *, gap_intent: str, instruction: str, keywords: list[str]) -> SynthesisResult:
+    def synthesize(
+        self, *, gap_intent: str, instruction: str, keywords: list[str]
+    ) -> SynthesisResult:
         result = SynthesisResult(requested_for=gap_intent, success=False)
         api_before, llm_before = self.client.api_calls, self.llm.usage.calls
         max_attempts = int(getattr(self.settings, "synthesis_max_attempts", 3))
-        feedback: Optional[str] = None
+        feedback: str | None = None
 
         for attempt_no in range(1, max_attempts + 1):
             attempt = SynthesisAttempt(attempt=attempt_no)
@@ -104,8 +104,13 @@ class Synthesizer:
 
             # 2) VALIDATE (deterministic, 0 API calls)
             errors = self._validate(plan)
-            attempt.outcomes.append(TestOutcome(tier=TestTier.SCHEMA_CHECK, passed=not errors,
-                                                detail="; ".join(errors) or "contract matches schema"))
+            attempt.outcomes.append(
+                TestOutcome(
+                    tier=TestTier.SCHEMA_CHECK,
+                    passed=not errors,
+                    detail="; ".join(errors) or "contract matches schema",
+                )
+            )
             if errors:
                 attempt.error = "schema validation failed: " + "; ".join(errors)
                 result.attempts.append(attempt)
@@ -137,11 +142,15 @@ class Synthesizer:
         result.api_calls = self.client.api_calls - api_before
         result.llm_calls = self.llm.usage.calls - llm_before
         if not result.success:
-            result.final_error = result.attempts[-1].error if result.attempts else "no attempts made"
+            result.final_error = (
+                result.attempts[-1].error if result.attempts else "no attempts made"
+            )
         return result
 
     # ── steps ─────────────────────────────────────────────────────────────────
-    def _propose(self, gap_intent: str, instruction: str, keywords: list[str], feedback: Optional[str]) -> CapabilityPlan:
+    def _propose(
+        self, gap_intent: str, instruction: str, keywords: list[str], feedback: str | None
+    ) -> CapabilityPlan:
         digest = self.client.schema_digest(keywords or ["issue"])
         caps = "\n".join(
             f"- {s.name}({', '.join(s.input_schema)}) — {s.description}"
@@ -167,7 +176,9 @@ class Synthesizer:
             if not plan.graphql_root_field:
                 errors.append("graphql_root_field is required")
             else:
-                field = self.client.root_field(plan.operation_type or "query", plan.graphql_root_field)
+                field = self.client.root_field(
+                    plan.operation_type or "query", plan.graphql_root_field
+                )
                 if field is None:
                     errors.append(
                         f"{plan.operation_type} root field '{plan.graphql_root_field}' does not exist in the schema"
@@ -176,11 +187,19 @@ class Synthesizer:
                     valid_args = set(field.args)
                     for a in plan.args:
                         if a not in valid_args:
-                            errors.append(f"arg '{a}' is not valid on '{plan.graphql_root_field}' (valid: {sorted(valid_args)})")
-                    required = {n for n, ar in field.args.items() if str(ar.type).endswith("!") and ar.default_value is None}
+                            errors.append(
+                                f"arg '{a}' is not valid on '{plan.graphql_root_field}' (valid: {sorted(valid_args)})"
+                            )
+                    required = {
+                        n
+                        for n, ar in field.args.items()
+                        if str(ar.type).endswith("!") and ar.default_value is None
+                    }
                     missing = required - set(plan.args)
                     if missing:
-                        errors.append(f"missing required arg(s) for '{plan.graphql_root_field}': {sorted(missing)}")
+                        errors.append(
+                            f"missing required arg(s) for '{plan.graphql_root_field}': {sorted(missing)}"
+                        )
             if not plan.selection:
                 errors.append("selection set is required for a graphql capability")
             # The selection is model-authored text interpolated into the document;
@@ -188,13 +207,16 @@ class Synthesizer:
             # sibling operation / mutation (e.g. "id } } mutation { issueDelete...")
             # is rejected here, at 0 API cost — never executed.
             if plan.graphql_root_field and plan.selection and not errors:
-                from graphql import parse, validate as gql_validate
+                from graphql import parse
+                from graphql import validate as gql_validate
 
                 try:
                     doc = self._assemble_graphql(plan)
                     gql_errors = gql_validate(self.client.graphql_schema(), parse(doc))
                     if gql_errors:
-                        errors.append(f"assembled document failed schema validation: {gql_errors[0].message}")
+                        errors.append(
+                            f"assembled document failed schema validation: {gql_errors[0].message}"
+                        )
                     if doc.count("{") != doc.count("}"):
                         errors.append("selection has unbalanced braces (possible injection)")
                 except Exception as e:  # noqa: BLE001 — a parse error is a rejected contract
@@ -220,10 +242,15 @@ class Synthesizer:
         # Trust the operation type, not the model's self-attested flag.
         side_effecting = plan.side_effecting or (plan.operation_type == "mutation")
         spec = CapabilitySpec(
-            name=plan.name, kind=plan.kind, source=CapabilitySource.SYNTHESIZED,
-            status=CapabilityStatus.PROBATIONARY, description=plan.description,
-            input_schema=plan.input_schema, side_effecting=side_effecting,
-            synthesized_for=plan.rationale, schema_hash=self.client.schema_hash(),
+            name=plan.name,
+            kind=plan.kind,
+            source=CapabilitySource.SYNTHESIZED,
+            status=CapabilityStatus.PROBATIONARY,
+            description=plan.description,
+            input_schema=plan.input_schema,
+            side_effecting=side_effecting,
+            synthesized_for=plan.rationale,
+            schema_hash=self.client.schema_hash(),
         )
         if plan.kind == CapabilityKind.GRAPHQL:
             spec.graphql = self._assemble_graphql(plan)
@@ -231,7 +258,9 @@ class Synthesizer:
             if plan.inverse_root_field:
                 spec.inverse_capability = plan.inverse_root_field
         else:
-            spec.composition = [TransformStep.model_validate(s.model_dump()) for s in plan.composition]
+            spec.composition = [
+                TransformStep.model_validate(s.model_dump()) for s in plan.composition
+            ]
         return spec
 
     @staticmethod
@@ -248,19 +277,47 @@ class Synthesizer:
     def _test(self, spec: CapabilitySpec, plan: CapabilityPlan) -> tuple[bool, TestOutcome]:
         """Non-destructive tiered test. Reads execute; writes are validated via dry-run."""
         api_before = self.client.api_calls
-        ctx = ExecutionContext(client=self.client, registry=self.registry,
-                               memory=self.memory, settings=self.settings, dry_run=True)
+        ctx = ExecutionContext(
+            client=self.client,
+            registry=self.registry,
+            memory=self.memory,
+            settings=self.settings,
+            dry_run=True,
+        )
         try:
             self.registry.run(spec.name, ctx, **(plan.probe_args or {}))
         except PlatformError as e:
-            tier = TestTier.COMPOSITION if spec.kind == CapabilityKind.COMPOSITE else TestTier.READ_PROBE
-            return False, TestOutcome(tier=tier, passed=False, detail=f"probe error: {e}",
-                                      api_calls=self.client.api_calls - api_before)
+            tier = (
+                TestTier.COMPOSITION
+                if spec.kind == CapabilityKind.COMPOSITE
+                else TestTier.READ_PROBE
+            )
+            return False, TestOutcome(
+                tier=tier,
+                passed=False,
+                detail=f"probe error: {e}",
+                api_calls=self.client.api_calls - api_before,
+            )
         except Exception as e:  # noqa: BLE001 — surface any DSL/interpreter error as a failed test
-            tier = TestTier.COMPOSITION if spec.kind == CapabilityKind.COMPOSITE else TestTier.READ_PROBE
-            return False, TestOutcome(tier=tier, passed=False, detail=f"probe raised {type(e).__name__}: {e}",
-                                      api_calls=self.client.api_calls - api_before)
-        tier = TestTier.COMPOSITION if spec.kind == CapabilityKind.COMPOSITE else TestTier.READ_PROBE
-        detail = ("composition dry-run: reads executed, writes shape-validated"
-                  if spec.kind == CapabilityKind.COMPOSITE else "read probe succeeded")
-        return True, TestOutcome(tier=tier, passed=True, detail=detail, api_calls=self.client.api_calls - api_before)
+            tier = (
+                TestTier.COMPOSITION
+                if spec.kind == CapabilityKind.COMPOSITE
+                else TestTier.READ_PROBE
+            )
+            return False, TestOutcome(
+                tier=tier,
+                passed=False,
+                detail=f"probe raised {type(e).__name__}: {e}",
+                api_calls=self.client.api_calls - api_before,
+            )
+        tier = (
+            TestTier.COMPOSITION if spec.kind == CapabilityKind.COMPOSITE else TestTier.READ_PROBE
+        )
+        detail = (
+            "composition dry-run: reads executed, writes shape-validated"
+            if spec.kind == CapabilityKind.COMPOSITE
+            else "read probe succeeded"
+        )
+        return True, TestOutcome(
+            tier=tier, passed=True, detail=detail, api_calls=self.client.api_calls - api_before
+        )
