@@ -38,7 +38,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.6"]
 
 [project.scripts]
 praxis = "praxis.cli:app"
@@ -58,6 +58,22 @@ addopts = "-q"
 # `from conftest import ...` work under a bare `pytest` invocation (not just
 # `python -m pytest`), which is what CI runs.
 pythonpath = [".", "tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = [".venv", "web"]
+
+[tool.ruff.lint]
+# pycodestyle errors/warnings, pyflakes, isort, pyupgrade, flake8-bugbear.
+select = ["E", "W", "F", "I", "UP", "B"]
+ignore = [
+    "E501",  # line length handled by the formatter
+    "B008",  # FastAPI/typer rely on calls in argument defaults
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]  # tests adjust import context before importing the package
 
 [tool.praxis]
 # Marker so tooling can detect a Praxis project root.
