@@ -56,10 +56,12 @@ def test_transform_whitelist_is_closed():
     assert set(_TRANSFORMS) == {"filter", "group", "sort", "count", "markdown_table", "create_each"}
 
 
-def test_cli_run_offline(capsys):
+def test_cli_run_offline(tmp_path):
     from typer.testing import CliRunner
     from praxis.cli import app
 
-    res = CliRunner().invoke(app, ["run", "--offline", "Create a bug titled 'Boom' in Engineering"])
-    assert res.exit_code == 0
+    db = str(tmp_path / "mem.sqlite")  # isolate from the working dir
+    res = CliRunner().invoke(app, ["run", "--offline", "--memory", db,
+                                   "Create a bug titled 'Boom' in Engineering"])
+    assert res.exit_code == 0, res.stdout
     assert "SUCCESS" in res.stdout
