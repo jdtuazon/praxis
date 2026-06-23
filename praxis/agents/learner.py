@@ -98,14 +98,17 @@ class Learner:
         self._learn_priority_vocab(ctx, execution_id, discovered)
 
         # 3) update capability stats + promote probationary → trusted.
-        # A never-attempted (SKIPPED) step is not evidence; a successful-then-
-        # compensated (ROLLED_BACK) step did its job and counts as a success.
+        # Only clean evidence counts: a SUCCESS is success, a FAILED is failure.
+        # SKIPPED (never attempted) and ROLLED_BACK (the run failed and was
+        # compensated for *other* reasons) are excluded entirely — counting them
+        # as success would inflate health and wrongly promote a capability whose
+        # runs actually failed; counting them as failure would penalise it unfairly.
         for s in steps:
-            if not s.capability or s.status == StepStatus.SKIPPED:
+            if not s.capability or s.status in (StepStatus.SKIPPED, StepStatus.ROLLED_BACK):
                 continue
             self.memory.capability.record_capability_use(
                 s.capability, plan.intent_signature,
-                success=(s.status in (StepStatus.SUCCESS, StepStatus.ROLLED_BACK)),
+                success=(s.status == StepStatus.SUCCESS),
                 duration=s.duration_s, api_calls=s.api_calls,
             )
             self._maybe_promote(s.capability, discovered)

@@ -264,7 +264,9 @@ class Executor:
         if not issue:
             return True, "could not resolve issue context — applying precondition defensively"
         team_id = (issue.get("team") or {}).get("id")
-        if issue.get(field) not in (None, "", 0):
+        # Treat ONLY None/"" as unset — a legitimate 0 (or False) must not be
+        # clobbered by the rule default.
+        if issue.get(field) is not None and issue.get(field) != "":
             return False, f"issue already has {field}={issue.get(field)}"
         rules = self.memory.capability.workflow_rules(team_id) if team_id else []
         if any((r.value or {}).get("requires") == field for r in rules):

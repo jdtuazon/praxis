@@ -54,6 +54,18 @@ def test_workflow_rewrite_never_overwrites_a_user_supplied_value():
     assert eng1["estimate"] == 5, "user's estimate must survive the rule rewrite"
 
 
+def test_workflow_rewrite_preserves_a_legitimate_zero_value():
+    """Regression: a real estimate of 0 must not be treated as 'unset' and overwritten."""
+    mem = Memory(":memory:")
+    make_agent(mem, FakeLinear()).run("Move my in-progress issue to Done")  # learn the rule
+    fake = FakeLinear()
+    # ENG-1 already has an estimate of 0 (a legitimate value).
+    next(i for i in fake.store["issues"] if i["identifier"] == "ENG-1")["estimate"] = 0
+    make_agent(mem, fake).run("Mark ENG-1 as done")
+    eng1 = next(i for i in fake.store["issues"] if i["identifier"] == "ENG-1")
+    assert eng1["estimate"] == 0, "a legitimate 0 estimate must be preserved, not clobbered with the default"
+
+
 def test_workflow_rule_is_team_scoped_not_applied_blindly():
     """Regression: a rule learned for Engineering must not mutate a Design issue."""
     mem = Memory(":memory:")
