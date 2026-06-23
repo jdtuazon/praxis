@@ -126,55 +126,64 @@ class Planner:
 
     # ── constraint-driven rewriting ──────────────────────────────────────────
     def _apply_workflow_rules(self, plan: Plan, decisions: list[Decision]) -> None:
-        """Insert/modify steps based on learned WORKFLOW_RULE constraints.
+        """Insert a precondition step ahead of a state transition that a learned
+        WORKFLOW_RULE requires (generic: `requires <field> before <state-type>`).
 
-        Demo case: a team requires an estimate before an issue may transition to a
-        completed state. If memory holds that rule, insert a set-estimate step
-        ahead of any 'move to Done' update — turning a previously-failing call
-        into a successful one *before* it is ever attempted.
+        Correctness guarantees:
+          • never inserts if another step already sets that field on the same
+            target (no duplicate / no overwriting a user-supplied value);
+          • the inserted step is *conditional* — its `inserted_by_constraint` tag
+            tells the executor to verify, at run time, that the target issue's
+            team actually has the rule (team is unknown at plan time). If not, the
+            executor no-ops it. This keeps the rewrite visible without applying a
+            rule team-blindly.
         """
-        rules = self.memory.capability.get_constraints(kind=ConstraintKind.WORKFLOW_RULE)
+        rules = [r for r in self.memory.capability.get_constraints(kind=ConstraintKind.WORKFLOW_RULE)
+                 if isinstance(r.value, dict) and r.value.get("requires") and r.value.get("before")]
         if not rules:
             return
-        estimate_rules = [r for r in rules if isinstance(r.value, dict) and r.value.get("requires") == "estimate"]
-        if not estimate_rules:
-            return
+        rule = rules[0]
+        req_field = rule.value["requires"]
+        default_val = rule.value.get("default_value", rule.value.get("default_estimate", 1))
 
         new_steps: list[PlanStep] = []
         changed = False
         next_index = max((s.index for s in plan.steps), default=-1) + 1
         for step in plan.steps:
-            moves_to_done = (
+            transitions = (
                 step.capability == "update_issue"
-                and ("stateId" in step.args)
-                and ("estimate" not in step.args)
+                and "stateId" in step.args
+                and req_field not in step.args
                 and any(w in (step.intent or "").lower() for w in ("done", "complete", "close", "finish"))
             )
-            if moves_to_done:
-                rule = estimate_rules[0]
-                default_estimate = (rule.value or {}).get("default_estimate", 1)
-                # Insert an estimate step targeting the same issue, before the transition.
-                target = step.args.get("id", "")
+            target = step.args.get("id", "")
+            # Does another step already set this field on the same target? Then
+            # depend on it instead of inserting a (possibly overwriting) duplicate.
+            sibling = next((s for s in plan.steps
+                            if s is not step and s.capability == "update_issue"
+                            and s.args.get("id") == target and req_field in s.args), None)
+            if transitions and sibling is None:
                 est_step = PlanStep(
                     index=next_index,
-                    intent="set estimate (required before Done by learned workflow rule)",
+                    intent=f"set {req_field} (a learned rule requires it before this transition)",
                     capability="update_issue",
-                    args={"id": target, "estimate": default_estimate},
+                    args={"id": target, req_field: default_val},
                     depends_on=list(step.depends_on),
-                    inserted_by_constraint=f"team/{rule.key}:estimate-before-done",
+                    inserted_by_constraint=f"workflow_rule:{req_field}-before-{rule.value['before']}",
                 )
                 next_index += 1
                 step.depends_on = list(set(step.depends_on) | {est_step.index})
                 new_steps.append(est_step)
                 changed = True
-                self.memory.capability.bump_hit(kind=ConstraintKind.WORKFLOW_RULE, scope=rule.scope, key=rule.key)
+            elif transitions and sibling is not None:
+                step.depends_on = list(set(step.depends_on) | {sibling.index})
             new_steps.append(step)
 
         if changed:
             plan.steps = new_steps
             decisions.append(Decision(
                 stage="plan",
-                summary="Rewrote the plan: inserted an estimate step before the Done transition",
-                rationale="Learned WORKFLOW_RULE: this team rejects completing an issue without an estimate. "
-                          "Pre-empting the failure instead of hitting it.",
+                summary=f"Rewrote the plan: inserted a '{req_field}' step before the transition",
+                rationale="Learned WORKFLOW_RULE pre-empts a failure the agent hit before "
+                          "(verified against the issue's team at execution time).",
             ))

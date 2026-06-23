@@ -183,6 +183,22 @@ class Synthesizer:
                         errors.append(f"missing required arg(s) for '{plan.graphql_root_field}': {sorted(missing)}")
             if not plan.selection:
                 errors.append("selection set is required for a graphql capability")
+            # The selection is model-authored text interpolated into the document;
+            # validate the ASSEMBLED document against the schema so an injected
+            # sibling operation / mutation (e.g. "id } } mutation { issueDelete...")
+            # is rejected here, at 0 API cost — never executed.
+            if plan.graphql_root_field and plan.selection and not errors:
+                from graphql import parse, validate as gql_validate
+
+                try:
+                    doc = self._assemble_graphql(plan)
+                    gql_errors = gql_validate(self.client.graphql_schema(), parse(doc))
+                    if gql_errors:
+                        errors.append(f"assembled document failed schema validation: {gql_errors[0].message}")
+                    if doc.count("{") != doc.count("}"):
+                        errors.append("selection has unbalanced braces (possible injection)")
+                except Exception as e:  # noqa: BLE001 — a parse error is a rejected contract
+                    errors.append(f"assembled document is not parseable: {e}")
         elif plan.kind == CapabilityKind.COMPOSITE:
             if not plan.composition:
                 errors.append("composite capability has no composition steps")
@@ -201,10 +217,12 @@ class Synthesizer:
         return errors
 
     def _build_spec(self, plan: CapabilityPlan) -> CapabilitySpec:
+        # Trust the operation type, not the model's self-attested flag.
+        side_effecting = plan.side_effecting or (plan.operation_type == "mutation")
         spec = CapabilitySpec(
             name=plan.name, kind=plan.kind, source=CapabilitySource.SYNTHESIZED,
             status=CapabilityStatus.PROBATIONARY, description=plan.description,
-            input_schema=plan.input_schema, side_effecting=plan.side_effecting,
+            input_schema=plan.input_schema, side_effecting=side_effecting,
             synthesized_for=plan.rationale, schema_hash=self.client.schema_hash(),
         )
         if plan.kind == CapabilityKind.GRAPHQL:

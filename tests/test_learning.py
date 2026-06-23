@@ -44,6 +44,27 @@ def test_negative_control_wiping_constraints_reverts_behaviour():
     assert not any(s.inserted_by_constraint for s in control.plan.steps)
 
 
+def test_workflow_rewrite_never_overwrites_a_user_supplied_value():
+    """Regression: the inserted estimate step must not clobber an explicit estimate."""
+    mem = Memory(":memory:")
+    make_agent(mem, FakeLinear()).run("Move my in-progress issue to Done")  # learn the rule
+    fake = FakeLinear()
+    make_agent(mem, fake).run("Mark ENG-1 as done and set the estimate to 5 points")
+    eng1 = next(i for i in fake.store["issues"] if i["identifier"] == "ENG-1")
+    assert eng1["estimate"] == 5, "user's estimate must survive the rule rewrite"
+
+
+def test_workflow_rule_is_team_scoped_not_applied_blindly():
+    """Regression: a rule learned for Engineering must not mutate a Design issue."""
+    mem = Memory(":memory:")
+    make_agent(mem, FakeLinear()).run("Move my in-progress issue to Done")  # learn rule for team_eng
+    fake = FakeLinear()
+    report = make_agent(mem, fake).run("Mark DES-1 as done")  # Design has no such rule
+    des1 = next(i for i in fake.store["issues"] if i["identifier"] == "DES-1")
+    assert des1.get("estimate") is None, "Design issue must not be given an estimate it never required"
+    assert report.status == ExecutionStatus.SUCCESS
+
+
 def test_correctness_postcondition_warm_run_actually_completes_the_issue():
     """Fewer wasted calls must not come at the cost of correctness."""
     mem = Memory(":memory:")

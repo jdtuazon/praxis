@@ -97,15 +97,19 @@ class Learner:
         # 2) learn the workspace's priority vocabulary from successful responses
         self._learn_priority_vocab(ctx, execution_id, discovered)
 
-        # 3) update capability stats + promote probationary → trusted
+        # 3) update capability stats + promote probationary → trusted.
+        # A never-attempted (SKIPPED) step is not evidence; a successful-then-
+        # compensated (ROLLED_BACK) step did its job and counts as a success.
         for s in steps:
-            if not s.capability:
+            if not s.capability or s.status == StepStatus.SKIPPED:
                 continue
             self.memory.capability.record_capability_use(
                 s.capability, plan.intent_signature,
-                success=(s.status == StepStatus.SUCCESS), duration=s.duration_s, api_calls=s.api_calls,
+                success=(s.status in (StepStatus.SUCCESS, StepStatus.ROLLED_BACK)),
+                duration=s.duration_s, api_calls=s.api_calls,
             )
             self._maybe_promote(s.capability, discovered)
+            self._maybe_demote(s.capability, s.status, discovered)
         return discovered
 
     def _constraint_from_error(self, obs: dict, execution_id: int) -> Constraint | None:
@@ -196,6 +200,16 @@ class Learner:
             if self.memory.capability.success_count(capability) >= int(getattr(self.settings, "capability_promote_after", 2)):
                 self.memory.capability.set_status(capability, CapabilityStatus.TRUSTED)
                 discovered.append(f"promoted capability '{capability}' probationary → trusted")
+
+    def _maybe_demote(self, capability: str, status, discovered: list[str]) -> None:
+        if status != StepStatus.FAILED:
+            return
+        spec = self.memory.capability.get_capability(capability)
+        if spec and spec.source == CapabilitySource.SYNTHESIZED and spec.status in (
+            CapabilityStatus.TRUSTED, CapabilityStatus.PROBATIONARY
+        ):
+            self.memory.capability.set_status(capability, CapabilityStatus.DEMOTED)
+            discovered.append(f"demoted capability '{capability}' → needs re-test (failed in the wild)")
 
 
 def _iter_issues(value: Any):

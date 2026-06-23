@@ -58,6 +58,29 @@ def derive_keywords(text: str) -> list[str]:
     return [t for t in dict.fromkeys(tokenize(text)) if t not in _STOPWORDS and len(t) > 2][:8]
 
 
+def _find_issue_in_context(ctx, issue_id):
+    """Find an already-fetched issue dict (by id) anywhere in run context — no API call."""
+    if not issue_id:
+        return None
+
+    def walk(v):
+        if isinstance(v, dict):
+            if v.get("id") == issue_id and "identifier" in v:
+                return v
+            for x in v.values():
+                r = walk(x)
+                if r:
+                    return r
+        elif isinstance(v, list):
+            for x in v:
+                r = walk(x)
+                if r:
+                    return r
+        return None
+
+    return walk(ctx.vars)
+
+
 class Executor:
     def __init__(self, registry: CapabilityRegistry, memory, settings) -> None:
         self.registry = registry
@@ -131,6 +154,24 @@ class Executor:
             args = ctx.resolve(step.args, ctx.vars)
             args = self._prevalidate(cap_name, args, ctx, sr)
 
+            # 3b) a constraint-inserted precondition step is CONDITIONAL: verify the
+            # target issue's team actually has the rule (team is unknown at plan time).
+            if step.inserted_by_constraint and cap_name == "update_issue":
+                applies, why = self._workflow_rule_applies(ctx, args)
+                if not applies:
+                    sr.status = StepStatus.SUCCESS
+                    sr.result_summary = f"no-op — {why}"
+                    decisions.append(Decision(stage="execute",
+                                              summary="Skipped the inserted precondition step (rule not applicable here)",
+                                              rationale=why))
+                    ctx.vars[f"step{step.index}"] = {"_noop": True}
+                    reports[step.index] = sr
+                    continue
+                att = CallAttribution(kind="pre_validated", ref=f"constraint:{step.inserted_by_constraint}",
+                                      detail="set field required by a learned workflow rule (verified for this team)")
+                ctx.note_saving(att)
+                sr.provenance.append(att)
+
             # 4) resolver cache: skip the API call if this entity is already known
             if cap_name in RESOLVER_CAPS:
                 key = _entity_key(cap_name, args)
@@ -193,6 +234,25 @@ class Executor:
 
         ordered = [reports[s.index] for s in plan.steps]
         return ordered, decisions, synth_results
+
+    # ── conditional applicability of a constraint-inserted precondition step ──
+    def _workflow_rule_applies(self, ctx, args: dict) -> tuple[bool, str]:
+        """Is the inserted precondition genuinely required for THIS issue's team?
+
+        Resolves the target issue from run context (no extra API call) and checks
+        the team-scoped WORKFLOW_RULE. Returns (applies, reason)."""
+        field = next((k for k in args if k != "id"), None)
+        issue = _find_issue_in_context(ctx, args.get("id"))
+        if not issue:
+            return True, "could not resolve issue context — applying precondition defensively"
+        team_id = (issue.get("team") or {}).get("id")
+        if issue.get(field) not in (None, "", 0):
+            return False, f"issue already has {field}={issue.get(field)}"
+        rules = self.memory.capability.workflow_rules(team_id) if team_id else []
+        if any((r.value or {}).get("requires") == field for r in rules):
+            self.memory.capability.bump_hit(kind=ConstraintKind.WORKFLOW_RULE, scope="team", key=team_id)
+            return True, f"team {team_id} requires {field} before this transition"
+        return False, f"team {team_id} has no '{field}' rule"
 
     # ── pre-validation against learned enum constraints ─────────────────────
     def _prevalidate(self, cap_name: str, args: dict[str, Any], ctx: ExecutionContext, sr: StepReport) -> dict[str, Any]:

@@ -105,8 +105,14 @@ class Capability:
         raise CapabilityError(f"Capability '{self.name}' has no executable form.")
 
     # ── GraphQL form ──────────────────────────────────────────────────────
+    def _is_mutation(self) -> bool:
+        return bool(self.spec.graphql) and self.spec.graphql.lstrip().lower().startswith("mutation")
+
     def _run_graphql(self, ctx: ExecutionContext, args: dict[str, Any]) -> Any:
-        if self.spec.side_effecting and ctx.dry_run:
+        # Never trust a self-attested flag for the write-guard: a mutation is a
+        # mutation by its operation type, so a mislabeled write cannot slip
+        # through a "non-destructive" dry-run probe.
+        if (self.spec.side_effecting or self._is_mutation()) and ctx.dry_run:
             return {"_dry_run": True, "args": args}
         data = ctx.client.execute(self.spec.graphql, args)
         if self.spec.select_path:
