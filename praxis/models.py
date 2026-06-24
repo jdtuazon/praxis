@@ -174,7 +174,7 @@ class CapabilityPlan(BaseModel):
     operation_type: str | None = None  # "query" | "mutation"
     args: dict[str, str] = Field(
         default_factory=dict
-    )  # arg_name -> graphql type (e.g. "id": "ID!")
+    )  # arg_name -> graphql type (e.g. "id": "String!")
     selection: str = Field(
         default="", description="Selection set body, e.g. 'success issue { id identifier }'."
     )

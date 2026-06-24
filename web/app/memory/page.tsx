@@ -31,9 +31,9 @@ export default function MemoryPage() {
   const c = mem?.counts;
   return (
     <>
-      <PageHeader eyebrow="capability memory + execution memory" title="What the agent knows.">
+      <PageHeader title="What the agent knows.">
         Memory is structured knowledge, not a log: cached entity ids, enum facts, permission boundaries
-        and plan-rewriting workflow rules — each read <em>before</em> acting. It persists across sessions
+        and plan-rewriting workflow rules, each read <em>before</em> acting. It persists across sessions
         and is what makes the next run different from the last.
       </PageHeader>
 

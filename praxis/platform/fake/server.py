@@ -31,23 +31,23 @@ schema { query: Query mutation: Mutation }
 type Query {
   viewer: User!
   teams(first: Int): TeamConnection!
-  team(id: ID!): Team
+  team(id: String!): Team
   users(first: Int): UserConnection!
   workflowStates(first: Int, filter: WorkflowStateFilter): WorkflowStateConnection!
   issueLabels(first: Int): IssueLabelConnection!
   issues(first: Int, filter: IssueFilter): IssueConnection!
-  issue(id: ID!): Issue
+  issue(id: String!): Issue
   projects(first: Int): ProjectConnection!
-  project(id: ID!): Project
+  project(id: String!): Project
   documents(first: Int): DocumentConnection!
 }
 
 type Mutation {
   issueCreate(input: IssueCreateInput!): IssuePayload!
-  issueUpdate(id: ID!, input: IssueUpdateInput!): IssuePayload!
-  issueArchive(id: ID!): IssueArchivePayload!
-  issueUnarchive(id: ID!): IssueArchivePayload!
-  issueDelete(id: ID!): IssueDeletePayload!
+  issueUpdate(id: String!, input: IssueUpdateInput!): IssuePayload!
+  issueArchive(id: String!): IssueArchivePayload!
+  issueUnarchive(id: String!): IssueArchivePayload!
+  issueDelete(id: String!): IssueDeletePayload!
   commentCreate(input: CommentCreateInput!): CommentPayload!
   projectCreate(input: ProjectCreateInput!): ProjectPayload!
   documentCreate(input: DocumentCreateInput!): DocumentPayload!
@@ -231,7 +231,7 @@ class FakeLinear:
         return next((s for s in self.store["states"] if s["id"] == sid), None)
 
     def _label(self, lid: str) -> dict | None:
-        return next((lbl for lbl in self.store["labels"] if lbl["id"] == lid), None)
+        return next((lb for lb in self.store["labels"] if lb["id"] == lid), None)
 
     def _issue(self, iid: str) -> dict | None:
         return next((i for i in self.store["issues"] if i["id"] == iid), None)
@@ -254,8 +254,8 @@ class FakeLinear:
         team = self._team(s["teamId"])
         return {"id": s["id"], "name": s["name"], "type": s["type"], "team": self._team_view(team)}
 
-    def _label_view(self, lbl: dict) -> dict:
-        return {"id": lbl["id"], "name": lbl["name"], "color": lbl.get("color")}
+    def _label_view(self, lb: dict) -> dict:
+        return {"id": lb["id"], "name": lb["name"], "color": lb.get("color")}
 
     def _conn(self, nodes: list) -> dict:
         return {"nodes": nodes, "pageInfo": {"hasNextPage": False, "endCursor": None}}
@@ -328,7 +328,7 @@ class FakeLinear:
             ),
             "workflowStates": self._r_workflow_states,
             "issueLabels": lambda info, first=None: self._conn(
-                [self._label_view(lbl) for lbl in self.store["labels"]]
+                [self._label_view(lb) for lb in self.store["labels"]]
             ),
             "issues": self._r_issues,
             "issue": lambda info, id: (

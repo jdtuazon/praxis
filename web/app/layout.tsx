@@ -4,7 +4,7 @@ import "./globals.css";
 import { Shell } from "@/components/Shell";
 
 export const metadata: Metadata = {
-  title: "Praxis — autonomous Linear agent",
+  title: "Praxis",
   description:
     "A self-improving agent that turns natural-language instructions into Linear actions, synthesizes new capabilities at runtime, and measurably improves with use.",
   icons: { icon: "/favicon.svg" },

@@ -17,9 +17,9 @@ export default function CapabilitiesPage() {
 
   return (
     <>
-      <PageHeader eyebrow="the agent’s alphabet" title="Capabilities.">
-        Atomic operations ship as trusted built-ins. Anything compound — aggregation, digests, bulk
-        edits — is <em>synthesized at runtime</em> as a composition of trusted pieces, tested before it’s
+      <PageHeader title="Capabilities.">
+        Atomic operations ship as trusted built-ins. Anything compound (aggregation, digests, bulk
+        edits) is <em>synthesized at runtime</em> as a composition of trusted pieces, tested before it’s
         trusted. Synthesized capabilities appear here as the agent invents them.
       </PageHeader>
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -116,6 +117,13 @@ class MemoryStore:
         self.path = str(path)
         if self.path != ":memory:":
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
+        # One connection is shared across threads (the FastAPI server runs sync
+        # endpoints in a threadpool, so /api/run and /api/memory land on
+        # different threads). A sqlite3 Connection is NOT safe for concurrent use,
+        # so every statement is serialized through this lock; without it, an
+        # overlapping request raises "bad parameter or other API misuse" and
+        # leaves cursors returning None. WAL keeps the serialized reads cheap.
+        self._lock = threading.RLock()
         self.conn = sqlite3.connect(self.path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL;")
@@ -124,17 +132,24 @@ class MemoryStore:
         self.conn.commit()
 
     # ── helpers ────────────────────────────────────────────────────────────
+    # All connection access goes through these and is serialized by `_lock`.
+    # `execute` returns a cursor whose only post-call use is `.lastrowid` (a
+    # cached attribute, no further I/O), so releasing the lock on return is safe.
     def execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
-        return self.conn.execute(sql, params)
+        with self._lock:
+            return self.conn.execute(sql, params)
 
     def query(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:
-        return list(self.conn.execute(sql, params).fetchall())
+        with self._lock:
+            return list(self.conn.execute(sql, params).fetchall())
 
     def one(self, sql: str, params: tuple = ()) -> sqlite3.Row | None:
-        return self.conn.execute(sql, params).fetchone()
+        with self._lock:
+            return self.conn.execute(sql, params).fetchone()
 
     def commit(self) -> None:
-        self.conn.commit()
+        with self._lock:
+            self.conn.commit()
 
     def close(self) -> None:
         self.conn.close()

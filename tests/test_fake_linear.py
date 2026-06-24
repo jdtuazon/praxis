@@ -45,17 +45,17 @@ def test_workflow_rule_estimate_before_done(client):
     done = "state_eng_completed"
     with pytest.raises(PlatformError) as e:
         client.execute(
-            "mutation($id: ID!, $i: IssueUpdateInput!){issueUpdate(id:$id,input:$i){success}}",
+            "mutation($id: String!, $i: IssueUpdateInput!){issueUpdate(id:$id,input:$i){success}}",
             {"id": "issue_5", "i": {"stateId": done}},
         )
     assert e.value.code == "WORKFLOW_RULE"
     # setting an estimate first lets it through
     client.execute(
-        "mutation($id: ID!, $i: IssueUpdateInput!){issueUpdate(id:$id,input:$i){success}}",
+        "mutation($id: String!, $i: IssueUpdateInput!){issueUpdate(id:$id,input:$i){success}}",
         {"id": "issue_5", "i": {"estimate": 3}},
     )
     r = client.execute(
-        "mutation($id: ID!, $i: IssueUpdateInput!){issueUpdate(id:$id,input:$i){success issue{state{type}}}}",
+        "mutation($id: String!, $i: IssueUpdateInput!){issueUpdate(id:$id,input:$i){success issue{state{type}}}}",
         {"id": "issue_5", "i": {"stateId": done}},
     )
     assert r["issueUpdate"]["issue"]["state"]["type"] == "completed"

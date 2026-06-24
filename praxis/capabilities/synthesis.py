@@ -53,7 +53,7 @@ Return ONLY a JSON object matching this shape:
   // graphql kind:
   "operation_type": "query"|"mutation",
   "graphql_root_field": "issueArchive",
-  "args": {"id": "ID!"},
+  "args": {"id": "String!"},
   "selection": "success issue { id identifier }",
   "select_path": "issueArchive",
   "side_effecting": true,
@@ -232,6 +232,21 @@ class Synthesizer:
                 elif kind == "transform":
                     if name not in WHITELISTED_TRANSFORMS:
                         errors.append(f"composition references non-whitelisted transform '{name}'")
+                    elif name == "create_each":
+                        # create_each fans out by invoking a per-item capability; without
+                        # it the step would pass schema-check and only die at the probe with
+                        # "No such capability: None". Validate it deterministically here.
+                        target = step.args.get("capability")
+                        if not target:
+                            errors.append(
+                                "composition step 'transform:create_each' requires a "
+                                "'capability' arg naming the per-item capability to invoke"
+                            )
+                        elif not self.registry.has(target):
+                            errors.append(
+                                f"composition step 'transform:create_each' references "
+                                f"unknown capability '{target}'"
+                            )
                 else:
                     errors.append(f"invalid composition op '{step.op}'")
         else:

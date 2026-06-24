@@ -216,6 +216,40 @@ class Executor:
                 ctx.note_saving(att)
                 sr.provenance.append(att)
 
+            # 3c) over-planning guard: a synthesized digest/report capability persists
+            # its own document. If the planner ALSO emitted a standalone create_document
+            # whose content did not bind (resolved empty) and a document was already
+            # created earlier in this run, that step is a redundant duplicate — elide it
+            # as a no-op rather than failing the whole run on a dangling reference.
+            if (
+                cap_name == "create_document"
+                and not str(args.get("content") or "").strip()
+                and any(e.description.startswith("created document") for e in ctx.journal)
+            ):
+                sr.provenance.append(
+                    CallAttribution(
+                        kind="elided_redundant",
+                        ref="capability/create_document",
+                        detail="a prior step already persisted the document; this duplicate "
+                        "create_document had no bound content",
+                    )
+                )
+                sr.status = StepStatus.SUCCESS
+                sr.result_summary = (
+                    "elided redundant create_document (document already created by a prior step)"
+                )
+                decisions.append(
+                    Decision(
+                        stage="execute",
+                        summary="Elided a redundant create_document step",
+                        rationale="The synthesized digest capability already persisted the document; the "
+                        "planner's extra create_document bound to a non-existent output key.",
+                    )
+                )
+                ctx.vars[f"step{step.index}"] = {"_elided_redundant": True}
+                reports[step.index] = sr
+                continue
+
             # 4) resolver cache: skip the API call if this entity is already known —
             # but honour the constraint's verification policy (a volatile id under
             # VERIFY_ON_READ, or an expired REFETCH_TTL, is re-resolved as a

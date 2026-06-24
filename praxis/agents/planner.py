@@ -38,6 +38,14 @@ Return ONLY JSON:
 }
 Priority integers: 1=Urgent, 2=High, 3=Medium, 4=Low, 0=None. Resolve 'me' with the `viewer` capability.
 Use create_each-style compound work via a synthesized capability (capability:null) when many items are involved.
+
+When the goal is to produce a digest / report / summary / rollup DOCUMENT from many items
+(gather → filter/group → format → save), plan it as a SINGLE step with "capability": null. One
+synthesized capability does the whole job end-to-end, INCLUDING creating the document. Do NOT add a
+separate create_document step after such a step — the synthesized capability already persists its own
+output, so a second create_document just duplicates the document and usually binds its `content` to a
+field the prior step never returned. Only use a standalone create_document step when its `content`
+comes from explicit arguments, not from a synthesized gather/format step.
 """
 
 

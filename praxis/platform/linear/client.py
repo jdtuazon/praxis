@@ -33,7 +33,22 @@ class HttpxTransport:
         resp = self._client.post(self._url, json={"query": query, "variables": variables})
         if resp.status_code == 429:
             raise PlatformError("Rate limited by Linear", code="RATELIMITED", status=429)
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            # Linear returns GraphQL validation errors (e.g. a bad filter) in the
+            # body with a 4xx status. Translate to a structured PlatformError so
+            # the executor records a failed step — and the learner can extract a
+            # constraint — instead of a raw httpx error escaping as a 500.
+            try:
+                body = resp.json()
+            except Exception:
+                body = None
+            if isinstance(body, dict) and body.get("errors"):
+                raise PlatformError.from_graphql(body["errors"], status=resp.status_code)
+            raise PlatformError(
+                f"Linear API returned HTTP {resp.status_code}: {(resp.text or '')[:200]}",
+                code=f"HTTP_{resp.status_code}",
+                status=resp.status_code,
+            )
         return resp.json()
 
     def close(self) -> None:
@@ -127,7 +142,7 @@ class LinearClient:
         chosen: list[str] = []
         # Root types first.
         for root in ("type Query", "type Mutation"):
-            for block in blocks.values():
+            for _name, block in blocks.items():
                 if block.startswith(root):
                     chosen.append(block)
         # Keyword-matched types.

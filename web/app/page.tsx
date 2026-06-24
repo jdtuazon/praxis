@@ -38,9 +38,9 @@ export default function ConsolePage() {
 
   return (
     <>
-      <PageHeader eyebrow="autonomous platform agent" title="Instruct the agent.">
+      <PageHeader title="Instruct the agent.">
         Describe a task in plain language. Praxis decomposes it, executes it against Linear, synthesizes
-        any capability it’s missing, and records what it learns — so the next run is measurably better.
+        any capability it’s missing, and records what it learns, so the next run is measurably better.
       </PageHeader>
 
       <div className="panel p-2">

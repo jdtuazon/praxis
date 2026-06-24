@@ -7,11 +7,11 @@ import { api } from "@/lib/api";
 import type { Meta } from "@/lib/types";
 
 const NAV = [
-  { href: "/", label: "Console", desc: "instruct & observe" },
-  { href: "/learning", label: "Learning", desc: "before / after" },
-  { href: "/memory", label: "Memory", desc: "what it knows" },
-  { href: "/capabilities", label: "Capabilities", desc: "skills it can run" },
-  { href: "/about", label: "About", desc: "how it works" },
+  { href: "/", label: "Console" },
+  { href: "/learning", label: "Learning" },
+  { href: "/memory", label: "Memory" },
+  { href: "/capabilities", label: "Capabilities" },
+  { href: "/about", label: "About" },
 ];
 
 function Mark() {
@@ -52,10 +52,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <div className="flex h-full flex-col gap-8 p-6">
           <Link href="/" className="flex items-center gap-2.5">
             <Mark />
-            <div className="leading-none">
-              <div className="text-[17px] font-semibold tracking-tight">praxis</div>
-              <div className="label mt-1">autonomous agent · Linear</div>
-            </div>
+            <div className="text-[17px] font-semibold tracking-tight leading-none">praxis</div>
           </Link>
 
           <nav className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
@@ -65,7 +62,7 @@ export function Shell({ children }: { children: ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`group flex shrink-0 flex-col rounded-sm border px-3 py-2 transition-colors lg:flex-row lg:items-baseline lg:justify-between ${
+                  className={`group flex shrink-0 rounded-sm border px-3 py-2 transition-colors ${
                     active
                       ? "border-iris/30 bg-iris/[0.06]"
                       : "border-transparent hover:border-line hover:bg-white/[0.02]"
@@ -74,7 +71,6 @@ export function Shell({ children }: { children: ReactNode }) {
                   <span className={`text-sm font-medium ${active ? "text-text" : "text-dim group-hover:text-text"}`}>
                     {item.label}
                   </span>
-                  <span className="hidden text-2xs text-faint lg:inline">{item.desc}</span>
                 </Link>
               );
             })}

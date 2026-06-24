@@ -41,6 +41,103 @@ def _required(args: dict, *keys: str) -> None:
         )
 
 
+# ── transport portability ────────────────────────────────────────────────────
+# FakeLinear ships a *simplified* filter/input schema (flat `teamId`, an
+# `includeArchived` filter field, container-less documents). Real Linear uses
+# nested comparator filters and requires a document container. These helpers let
+# the builtins stay portable: offline behaviour is untouched (the deterministic
+# ScriptedLLM already emits the flat shape FakeLinear understands), while live
+# calls are translated to the real Linear schema.
+def _is_live(ctx: ExecutionContext) -> bool:
+    return type(getattr(ctx.client, "_t", None)).__name__ != "FakeLinear"
+
+
+_STATE_TYPE_ALIASES = {
+    "in-progress": "started",
+    "in progress": "started",
+    "inprogress": "started",
+    "started": "started",
+    "doing": "started",
+    "in-review": "started",
+    "in review": "started",
+    "done": "completed",
+    "completed": "completed",
+    "complete": "completed",
+    "todo": "unstarted",
+    "to-do": "unstarted",
+    "unstarted": "unstarted",
+    "backlog": "backlog",
+    "canceled": "canceled",
+    "cancelled": "canceled",
+}
+
+
+def _parse_filter_string(s: str) -> dict:
+    """Best-effort parse of a loose 'key:value' filter string an LLM might emit,
+    e.g. 'state:in-progress assignee:me' -> a flat filter dict."""
+    flat: dict[str, Any] = {}
+    for tok in s.replace(",", " ").split():
+        if ":" not in tok:
+            continue
+        k, _, v = tok.partition(":")
+        k, v = k.strip().lower(), v.strip().lower()
+        if k in ("assignee", "assigneeid", "assigned"):
+            if v in ("me", "@me", "self", "viewer"):
+                flat["assigneeIsMe"] = True
+            elif v in ("none", "null", "nobody", "unassigned"):
+                flat["assigneeIsNull"] = True
+            else:
+                flat["assigneeId"] = v
+        elif k in ("state", "status", "statetype"):
+            flat["stateType"] = _STATE_TYPE_ALIASES.get(v, v)
+        elif k in ("team", "teamid"):
+            flat["teamId"] = v
+        elif k in ("priority", "prio"):
+            try:
+                flat["priority"] = int(v)
+            except ValueError:
+                pass
+    return flat
+
+
+def _to_linear_issue_filter(f: Any) -> dict:
+    """Translate a flat/loose/nested filter into real Linear's nested IssueFilter."""
+    if f is None:
+        return {}
+    if isinstance(f, str):
+        f = _parse_filter_string(f)
+    if not isinstance(f, dict):
+        return {}
+    out: dict[str, Any] = {}
+    flat: dict[str, Any] = {}
+    for k, v in f.items():
+        # already-nested comparator shapes pass straight through
+        if k in ("team", "assignee", "state", "labels", "creator", "project") and isinstance(
+            v, dict
+        ):
+            out[k] = v
+        else:
+            flat[k] = v
+    if flat.get("teamId"):
+        out["team"] = {"id": {"eq": flat["teamId"]}}
+    if flat.get("assigneeIsMe") is True:
+        out["assignee"] = {"isMe": {"eq": True}}
+    elif flat.get("assigneeIsNull") is True:
+        out["assignee"] = {"null": True}
+    elif flat.get("assigneeIsNull") is False:
+        out["assignee"] = {"null": False}
+    elif flat.get("assigneeId"):
+        out["assignee"] = {"id": {"eq": flat["assigneeId"]}}
+    if flat.get("stateId"):
+        out.setdefault("state", {})["id"] = {"eq": flat["stateId"]}
+    if flat.get("stateType"):
+        out.setdefault("state", {})["type"] = {"eq": flat["stateType"]}
+    if flat.get("priority") is not None and "priority" not in out:
+        out["priority"] = {"eq": flat["priority"]}
+    # `includeArchived` is a top-level arg on issues(...), never a filter field.
+    return out
+
+
 # ── read primitives ─────────────────────────────────────────────────────────
 def list_teams(ctx: ExecutionContext, **a) -> Any:
     return ctx.client.execute("{ teams { nodes { id key name } } }")["teams"]["nodes"]
@@ -59,12 +156,22 @@ def find_team(ctx: ExecutionContext, *, name: str, **_) -> dict:
 
 
 def list_workflow_states(ctx: ExecutionContext, *, teamId: str, **_) -> list:
-    q = "query($f: WorkflowStateFilter){ workflowStates(filter:$f){ nodes { id name type team { id } } } }"
-    return ctx.client.execute(q, {"f": {"teamId": teamId}})["workflowStates"]["nodes"]
+    # NOTE: real Linear's WorkflowStateFilter has no `teamId` field (it nests as
+    # `team: { id: { eq } }`), while FakeLinear's simplified schema uses `teamId`.
+    # To stay portable across both transports we fetch unfiltered and filter the
+    # (small) set client-side by the resolved `team.id`.
+    q = "query{ workflowStates{ nodes { id name type team { id } } } }"
+    nodes = ctx.client.execute(q)["workflowStates"]["nodes"]
+    return [s for s in nodes if (s.get("team") or {}).get("id") == teamId]
 
 
 def find_workflow_state(
-    ctx: ExecutionContext, *, teamId: str, name: str | None = None, type: str | None = None, **_
+    ctx: ExecutionContext,
+    *,
+    teamId: str,
+    name: str | None = None,
+    type: str | None = None,
+    **_,
 ) -> dict:
     states = list_workflow_states(ctx, teamId=teamId)
     if name:
@@ -102,16 +209,22 @@ def viewer(ctx: ExecutionContext, **a) -> dict:
 
 def query_issues(ctx: ExecutionContext, *, filter: dict | None = None, **_) -> list:
     q = "query($f: IssueFilter){ issues(filter:$f){ nodes {" + _ISSUE_FIELDS + "} } }"
-    return ctx.client.execute(q, {"f": filter or {}})["issues"]["nodes"]
+    # Live Linear needs nested comparator filters; FakeLinear keeps the flat shape
+    # its deterministic planner emits. Normalise only on the live transport.
+    f = _to_linear_issue_filter(filter) if _is_live(ctx) else (filter or {})
+    return ctx.client.execute(q, {"f": f})["issues"]["nodes"]
 
 
 def get_issue(ctx: ExecutionContext, *, id: str, **_) -> dict | None:
-    q = "query($id: ID!){ issue(id:$id){" + _ISSUE_FIELDS + "} }"
+    q = "query($id: String!){ issue(id:$id){" + _ISSUE_FIELDS + "} }"
     return ctx.client.execute(q, {"id": id})["issue"]
 
 
 def find_issue(ctx: ExecutionContext, *, identifier: str, **_) -> dict:
-    for issue in query_issues(ctx, filter={"includeArchived": True}):
+    # NOTE: `includeArchived` is NOT a field of real Linear's IssueFilter (it is a
+    # top-level arg on `issues(...)`). Querying with an empty filter is portable
+    # across real Linear and FakeLinear and covers all active issues.
+    for issue in query_issues(ctx, filter=None):
         if issue["identifier"].lower() == identifier.lower():
             return issue
     raise PlatformError(f"No issue with identifier '{identifier}'", code="ENTITY_NOT_FOUND")
@@ -185,7 +298,7 @@ def update_issue(ctx: ExecutionContext, *, id: str, **a) -> dict:
                 else:
                     prior[k] = before.get(k)
     q = (
-        "mutation($id: ID!, $input: IssueUpdateInput!){ issueUpdate(id:$id, input:$input){ success issue {"
+        "mutation($id: String!, $input: IssueUpdateInput!){ issueUpdate(id:$id, input:$input){ success issue {"
         + _ISSUE_FIELDS
         + "} } }"
     )
@@ -206,7 +319,9 @@ def update_issue(ctx: ExecutionContext, *, id: str, **a) -> dict:
 def archive_issue(ctx: ExecutionContext, *, id: str, **_) -> dict:
     if ctx.dry_run:
         return {"_dry_run": True, "id": id}
-    res = ctx.client.execute("mutation($id: ID!){ issueArchive(id:$id){ success } }", {"id": id})
+    res = ctx.client.execute(
+        "mutation($id: String!){ issueArchive(id:$id){ success } }", {"id": id}
+    )
     ctx.record_effect(
         AppliedEffect(
             step_index=-1,
@@ -223,7 +338,7 @@ def unarchive_issue(ctx: ExecutionContext, *, id: str, **_) -> dict:
     if ctx.dry_run:
         return {"_dry_run": True, "id": id}
     return ctx.client.execute(
-        "mutation($id: ID!){ issueUnarchive(id:$id){ success } }", {"id": id}
+        "mutation($id: String!){ issueUnarchive(id:$id){ success } }", {"id": id}
     )["issueUnarchive"]
 
 
@@ -252,6 +367,12 @@ def create_document(
     inp = {"title": title, "content": content}
     if projectId:
         inp["projectId"] = projectId
+    elif _is_live(ctx):
+        # Real Linear requires exactly one container (project/team/issue/...);
+        # FakeLinear accepts a standalone document. Anchor live docs to a team.
+        teams = list_teams(ctx)
+        if teams:
+            inp["teamId"] = teams[0]["id"]
     q = "mutation($input: DocumentCreateInput!){ documentCreate(input:$input){ success document { id title url } } }"
     res = ctx.client.execute(q, {"input": inp})
     ctx.record_effect(

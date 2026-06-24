@@ -22,8 +22,8 @@ npm install
 npm run dev                     # → http://localhost:3000
 ```
 
-`PRAXIS_API_URL` defaults to `http://127.0.0.1:8000`; set it if your API is
-elsewhere (see `.env.example`).
+Requires **Node 18+** (tested on Node 26). `PRAXIS_API_URL` defaults to
+`http://127.0.0.1:8000`; set it if your API is elsewhere (see `.env.example`).
 
 ## Design
 

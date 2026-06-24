@@ -25,8 +25,8 @@ export default function LearningPage() {
 
   return (
     <>
-      <PageHeader eyebrow="measurable self-improvement" title="Before / after, with a control.">
-        The headline isn’t “it feels faster.” It’s a different decision, proven with numbers — and a
+      <PageHeader title="Before / after, with a control.">
+        The headline isn’t “it feels faster.” It’s a different decision, proven with numbers, plus a
         negative control that reverts the gain when the learned constraint is wiped. Run it live.
       </PageHeader>
 

@@ -18,9 +18,9 @@ const PIPELINE = [
 export default function AboutPage() {
   return (
     <>
-      <PageHeader eyebrow="how it works" title="An agent that learns by doing.">
+      <PageHeader title="An agent that learns by doing.">
         Praxis turns a natural-language instruction into Linear actions, invents the capabilities it’s
-        missing, and gets measurably better with use — not by retraining, but by extracting structured
+        missing, and gets measurably better with use: not by retraining, but by extracting structured
         knowledge from every execution and using it to decide differently next time.
       </PageHeader>
 

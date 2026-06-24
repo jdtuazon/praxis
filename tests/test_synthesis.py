@@ -77,6 +77,44 @@ def test_hallucinated_field_dies_at_zero_api_cost():
     assert spec.status.value == "probationary" and spec.schema_hash
 
 
+def test_create_each_without_capability_arg_dies_at_schema_check():
+    """A transform:create_each step that omits its `capability` arg must be rejected
+    at schema-check (0 API calls), not deferred to the probe with `No such capability: None`."""
+    bad = json.dumps(
+        {
+            "name": "fan_out",
+            "kind": "composite",
+            "input_schema": {},
+            "composition": [
+                {"op": "capability:query_issues", "args": {"filter": {}}, "bind": "issues"},
+                {
+                    "op": "transform:create_each",  # no `capability` arg — invalid
+                    "args": {
+                        "source": "{{issues}}",
+                        "args": {"issueId": "{{item.id}}", "body": "ping"},
+                    },
+                    "bind": "out",
+                },
+            ],
+            "probe_args": {},
+        }
+    )
+
+    def responder(s, p):
+        return bad if "[[ROLE:SYNTHESIZER]]" in s else None
+
+    synth, mem, client = _synth(responder)
+    res = synth.synthesize(
+        gap_intent="comment on each issue", instruction="ping each", keywords=["issue"]
+    )
+    assert not res.success
+    a1 = res.attempts[0]
+    assert a1.outcomes[0].tier.value == "schema_check"
+    assert not a1.outcomes[0].passed and a1.outcomes[0].api_calls == 0
+    assert "create_each" in a1.error and "capability" in a1.error
+    assert mem.capability.get_capability("fan_out") is None  # never registered
+
+
 def test_graphql_contract_validates_args_against_real_schema():
     bad = json.dumps(
         {
@@ -130,7 +168,7 @@ def test_selection_injection_is_rejected_at_zero_cost():
             "kind": "graphql",
             "operation_type": "query",
             "graphql_root_field": "issue",
-            "args": {"id": "ID!"},
+            "args": {"id": "String!"},
             "selection": 'id } } mutation evil { issueDelete(id: "issue_1") { success',  # injection
             "select_path": "issue",
         }
@@ -141,7 +179,7 @@ def test_selection_injection_is_rejected_at_zero_cost():
             "kind": "graphql",
             "operation_type": "query",
             "graphql_root_field": "issue",
-            "args": {"id": "ID!"},
+            "args": {"id": "String!"},
             "selection": "id identifier",
             "select_path": "issue",
             "probe_args": {"id": "issue_1"},
@@ -172,7 +210,7 @@ def test_synthesized_mutation_is_side_effecting_regardless_of_flag():
             "kind": "graphql",
             "operation_type": "mutation",
             "graphql_root_field": "issueArchive",
-            "args": {"id": "ID!"},
+            "args": {"id": "String!"},
             "selection": "success",
             "select_path": "issueArchive",
             "side_effecting": False,

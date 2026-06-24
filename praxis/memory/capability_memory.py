@@ -125,6 +125,14 @@ class CapabilityMemory:
                FROM capability_stats WHERE capability = ?""",
             (capability,),
         )
+        if row is None:  # no stats yet (or a transient empty read) — report zeroed health
+            return {
+                "attempts": 0,
+                "successes": 0,
+                "failures": 0,
+                "success_rate": None,
+                "total_api_calls": 0,
+            }
         a, s, f, c = row["a"], row["s"], row["f"], row["c"]
         return {
             "attempts": a,

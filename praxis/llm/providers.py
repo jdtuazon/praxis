@@ -41,30 +41,60 @@ class AnthropicLLM(LLM):
 
 
 class OpenAILLM(LLM):
-    def __init__(self, api_key: str, model: str) -> None:
+    """OpenAI-compatible chat client.
+
+    Also drives any OpenAI-protocol gateway — notably **OpenRouter** — via a
+    custom ``base_url``. OpenRouter exposes hundreds of models behind one key,
+    and not all of them honour ``response_format={"type": "json_object"}``; set
+    ``json_via_response_format=False`` to instead steer JSON purely through the
+    system prompt (parsed leniently by ``extract_json``), which works on every
+    model.
+    """
+
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        *,
+        base_url: str | None = None,
+        name_prefix: str = "openai",
+        json_via_response_format: bool = True,
+    ) -> None:
         super().__init__()
         if not api_key:
-            raise LLMError("OPENAI_API_KEY is not set.")
+            env = "OPENROUTER_API_KEY" if name_prefix == "openrouter" else "OPENAI_API_KEY"
+            raise LLMError(f"{env} is not set.")
         import openai
 
-        self._client = openai.OpenAI(api_key=api_key)
+        client_kwargs: dict = {"api_key": api_key}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+        self._client = openai.OpenAI(**client_kwargs)
         self._model = model
+        self._name_prefix = name_prefix
+        self._json_via_response_format = json_via_response_format
 
     @property
     def name(self) -> str:
-        return f"openai:{self._model}"
+        return f"{self._name_prefix}:{self._model}"
 
     def _generate(
         self, system: str, prompt: str, max_tokens: int, json_mode: bool
     ) -> tuple[str, int, int]:
+        sys = system
         kwargs: dict = {}
         if json_mode:
-            kwargs["response_format"] = {"type": "json_object"}
+            if self._json_via_response_format:
+                kwargs["response_format"] = {"type": "json_object"}
+            else:
+                sys = (
+                    system + "\n\nRespond with ONLY valid JSON. No prose, no code fences."
+                ).strip()
         resp = self._client.chat.completions.create(
             model=self._model,
             max_tokens=max_tokens,
             messages=[
-                {"role": "system", "content": system},
+                {"role": "system", "content": sys},
                 {"role": "user", "content": prompt},
             ],
             **kwargs,
