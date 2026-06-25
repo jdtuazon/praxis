@@ -138,6 +138,18 @@ def _row(report) -> dict:
         "wasted_calls": report.wasted_calls,
         "synthesized": len(report.synthesized_capabilities),
         "saved": [a for a in report.learning.attributions],
+        # The decision itself, as data: the ordered plan, with any step the agent
+        # inserted because of a learned constraint flagged. This is what makes the
+        # behaviour change auditable rather than narrated — cold and warm runs of
+        # the same intent emit structurally different plans.
+        "plan_source": report.plan.source.value,
+        "plan": [
+            {
+                "step": s.capability or s.intent,
+                "inserted_by_constraint": s.inserted_by_constraint,
+            }
+            for s in report.plan.steps
+        ],
     }
 
 

@@ -28,3 +28,11 @@ venv/
 .idea/
 .vscode/
 *.swp
+
+assessment/
+
+# Scratch / tooling
+tmp/
+tmp_*.json
+.playwright-mcp/
+*.png
