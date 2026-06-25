@@ -83,7 +83,7 @@ export default function AboutPage() {
           </p>
           <a
             className="link mt-3 inline-block text-sm"
-            href="https://github.com/jdtuazon/watermelon"
+            href="https://github.com/jdtuazon/praxis"
             target="_blank"
             rel="noreferrer"
           >
