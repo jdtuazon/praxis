@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report security issues privately by opening a
-[GitHub security advisory](https://github.com/jdtuazon/watermelon/security/advisories/new)
+[GitHub security advisory](https://github.com/jdtuazon/praxis/security/advisories/new)
 rather than a public issue. You can expect an initial response within a few days.
 
 ## Trust boundaries
