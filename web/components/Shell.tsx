@@ -80,7 +80,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <ModeBadge meta={meta} reachable={reachable} />
             <a
               className="label hover:text-dim"
-              href="https://github.com/jdtuazon/watermelon"
+              href="https://github.com/jdtuazon/praxis"
               target="_blank"
               rel="noreferrer"
             >
