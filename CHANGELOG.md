@@ -35,4 +35,4 @@ plus a CLI, a JSON API + dashboard, and a Next.js console.
 - **Deployment** — Dockerfiles for the API and the console, a `docker-compose`
   stack, and Vercel configuration.
 
-[0.1.0]: https://github.com/jdtuazon/watermelon
+[0.1.0]: https://github.com/jdtuazon/praxis
