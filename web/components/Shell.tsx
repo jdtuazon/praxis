@@ -107,7 +107,20 @@ function ModeBadge({ meta, reachable }: { meta: Meta | null; reachable: boolean 
       </div>
     );
   }
-  const live = meta?.mode === "live";
+  if (!meta) {
+    // Still resolving — the backend can cold-start (~30-60s on a free tier). Show
+    // a neutral connecting state rather than asserting "offline" prematurely.
+    return (
+      <div className="rounded-sm border border-line bg-surface-2 px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-faint" />
+          <span className="label">connecting…</span>
+        </div>
+        <div className="mt-1 text-2xs text-faint">waking the backend</div>
+      </div>
+    );
+  }
+  const live = meta.mode === "live";
   return (
     <div className="rounded-sm border border-line bg-surface-2 px-3 py-2">
       <div className="flex items-center gap-2">
@@ -115,7 +128,7 @@ function ModeBadge({ meta, reachable }: { meta: Meta | null; reachable: boolean 
         <span className="label">{live ? "live · real Linear" : "offline · simulation"}</span>
       </div>
       <div className="mt-1 text-2xs text-faint">
-        {meta ? (live ? "real API calls" : "deterministic FakeLinear") : "connecting…"}
+        {live ? "real API calls" : "deterministic FakeLinear"}
       </div>
     </div>
   );

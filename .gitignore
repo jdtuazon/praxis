@@ -28,3 +28,12 @@ venv/
 .idea/
 .vscode/
 *.swp
+
+# Local-only assessment/scoring harness (a dev loop tool, not part of the app).
+assessment/
+
+# Scratch / tooling
+tmp/
+tmp_*.json
+.playwright-mcp/
+*.png
