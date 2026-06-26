@@ -70,6 +70,22 @@ Return ONLY a JSON object matching this shape:
 }
 Transforms available: filter, group, sort, count, markdown_table, create_each.
 Template references use {{bind}} or {{item.field}} (inside create_each).
+
+For a DIGEST / ROLLUP / GROUPED-SUMMARY gap, build ONE reusable capability named `issue_digest`
+(not a grouping-specific name). Parameterize it so the SAME capability serves any grouping
+(priority, assignee, team, status): declare input_schema {"group_by": "string", "title": "string"}
+and thread {{args.group_by}} / {{args.title}} through the composition:
+  "name": "issue_digest",
+  "kind": "composite",
+  "input_schema": {"group_by": "string", "title": "string"},
+  "composition": [
+    {"op": "capability:query_issues", "args": {"filter": {}}, "bind": "issues"},
+    {"op": "transform:group", "args": {"source": "{{issues}}", "by": "{{args.group_by}}", "null_label": "Unassigned"}, "bind": "groups"},
+    {"op": "transform:markdown_table", "args": {"source": "{{groups}}", "title": "{{args.title}}", "columns": ["identifier", "title", "priorityLabel"]}, "bind": "table"},
+    {"op": "capability:create_document", "args": {"title": "{{args.title}}", "content": "{{table}}"}, "bind": "doc"}
+  ],
+  "probe_args": {"group_by": "priorityLabel", "title": "Probe Digest"}
+This makes the digest transfer to a later, differently-grouped request with no re-synthesis.
 """
 
 
