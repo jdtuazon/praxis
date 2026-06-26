@@ -25,7 +25,9 @@ from ..models import (
 PLANNER_SYSTEM = """[[ROLE:PLANNER]] You are Praxis's planner for the Linear platform.
 Decompose the user's instruction into an ordered list of executable steps. Each step names ONE capability
 and its arguments. Steps may reference an earlier step's output with {{stepN.path}} (e.g. {{step0.id}}).
-If a sub-goal needs an operation no capability covers, set "capability": null — it will be synthesized.
+A step that returns a LIST (e.g. query_issues) is indexed: {{step1.0.id}} is the first result's id and
+{{step1.0.team.id}} its team id. If a sub-goal needs an operation no capability covers, set
+"capability": null — it will be synthesized.
 
 Return ONLY JSON:
 {
@@ -37,15 +39,45 @@ Return ONLY JSON:
   ]
 }
 Priority integers: 1=Urgent, 2=High, 3=Medium, 4=Low, 0=None. Resolve 'me' with the `viewer` capability.
-Use create_each-style compound work via a synthesized capability (capability:null) when many items are involved.
 
-When the goal is to produce a digest / report / summary / rollup DOCUMENT from many items
-(gather → filter/group → format → save), plan it as a SINGLE step with "capability": null. One
-synthesized capability does the whole job end-to-end, INCLUDING creating the document. Do NOT add a
-separate create_document step after such a step — the synthesized capability already persists its own
-output, so a second create_document just duplicates the document and usually binds its `content` to a
-field the prior step never returned. Only use a standalone create_document step when its `content`
-comes from explicit arguments, not from a synthesized gather/format step.
+RESOLVING THE TARGET ISSUE
+- If the instruction names an identifier like ENG-3, resolve it with find_issue {"identifier": "ENG-3"};
+  the result carries the issue's team at {{step0.team.id}}.
+- If the instruction refers to an issue by DESCRIPTION and gives no identifier (e.g. "my in-progress
+  issue", "my current work", "the bug I'm working on"), DO NOT invent an identifier. Resolve it:
+    step A: viewer {}                                            # resolves "me"
+    step B: query_issues {"filter": {"assigneeId": "{{stepA.id}}", "stateType": "started"}}
+  then reference the issue as {{stepB.0.id}} and its team as {{stepB.0.team.id}}.
+  Filter stateType aliases: "in progress"→"started", "todo"→"unstarted", "done"→"completed".
+  Drop assigneeId from the filter when the instruction is not scoped to "me".
+
+STATE TRANSITIONS (moving an issue between workflow states)
+- A workflow state belongs to a team, so find_workflow_state ALWAYS needs teamId. Pass the target
+  issue's team id — {{step0.team.id}} (from find_issue) or {{stepB.0.team.id}} (from a query).
+- Resolve the state by TYPE when possible: {"teamId": ..., "type": "completed"} for done/complete/close,
+  {"teamId": ..., "type": "started"} for in-progress/start, {"teamId": ..., "type": "unstarted"} for todo.
+  Use {"teamId": ..., "name": "In Progress"} only when a specific named state is requested.
+- Then update_issue {"id": <issue id>, "stateId": "{{stepN.id}}"}.
+  Example — "move my in-progress issue to Done":
+    0 viewer {}
+    1 query_issues {"filter": {"assigneeId": "{{step0.id}}", "stateType": "started"}}   depends_on [0]
+    2 find_workflow_state {"teamId": "{{step1.0.team.id}}", "type": "completed"}          depends_on [1]
+    3 update_issue {"id": "{{step1.0.id}}", "stateId": "{{step2.id}}"}                     depends_on [1,2]
+
+DIGESTS / ROLLUPS / GROUPED SUMMARIES (a document built from many items)
+This is gather → group → format → create-document; it CANNOT be one API call.
+- If AVAILABLE CAPABILITIES already lists a digest capability such as `issue_digest` that takes a
+  `group_by` arg, REUSE it: emit ONE step naming that capability with
+  args {"group_by": "<path>", "title": "<title>"} — do not synthesize a new one.
+  group_by paths: priority→"priorityLabel", assignee→"assignee.displayName", team→"team.name",
+  status→"state.name".
+- Otherwise emit ONE step with "capability": null (it will be synthesized as a reusable, parameterized
+  capability). Do NOT add a separate create_document step afterwards — the digest capability persists its
+  own document, so a second create_document just duplicates it and usually binds `content` to a field the
+  prior step never returned. Only use a standalone create_document step when its `content` comes from
+  explicit arguments, not from a synthesized gather/format step.
+
+Use create_each-style compound work via a synthesized capability (capability:null) when many items are involved.
 """
 
 
