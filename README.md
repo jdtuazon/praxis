@@ -97,26 +97,17 @@ shape is what's cached; the rewrite is re-derived live from the constraint.)
 
 ## How it works
 
-```
-  instruction
-      │
-      ▼
- ┌─────────┐   reuse plan shape / rewrite from learned rules
- │ Planner │◀──────────────── execution + capability memory
- └────┬────┘
-      ▼
- ┌──────────┐  gap? → ┌─────────────┐ reason→contract→validate→test→register
- │ Executor │────────▶│ Synthesizer │
- └────┬─────┘         └─────────────┘
-      │ cached ids skip probes · enum facts pre-validate · permission facts switch tools
-      ▼
- ┌───────────┐  required step failed after side effects?
- │ Validator │────────────────────────────▶ best-effort compensation (reversibility taxonomy)
- └────┬──────┘
-      ▼
- ┌─────────┐  extract constraints · cache entities · update stats · promote capabilities
- │ Learner │──────────────────────────────────────────────▶ structured ExecutionReport
- └─────────┘
+```mermaid
+flowchart TD
+    I([instruction]) --> P[Planner]
+    MEM[(execution + capability memory)] -. reuse plan shape / rewrite from learned rules .-> P
+    P --> E[Executor]
+    E -- "gap?" --> S[Synthesizer]
+    S -. "reason → contract → validate → test → register" .-> E
+    E -- "cached ids skip probes · enum facts pre-validate · permission facts switch tools" --> V[Validator]
+    V -- "required step failed after side effects?" --> C["best-effort compensation<br/>(reversibility taxonomy)"]
+    V --> L[Learner]
+    L -- "extract constraints · cache entities · update stats · promote capabilities" --> R([structured ExecutionReport])
 ```
 
 Wired as a **LangGraph** state machine (`plan → execute → validate → compensate? →
