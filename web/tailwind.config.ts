@@ -60,10 +60,15 @@ const config: Config = {
           "0%": { transform: "translateX(-100%)" },
           "100%": { transform: "translateX(100%)" },
         },
+        // marching ants for the loop diagram's feedback arc
+        march: {
+          "100%": { "stroke-dashoffset": "-24" },
+        },
       },
       animation: {
         "fade-up": "fade-up 0.4s cubic-bezier(0.22,0.61,0.36,1) both",
         sweep: "sweep 1.1s ease-in-out infinite",
+        march: "march 1.2s linear infinite",
       },
     },
   },

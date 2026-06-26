@@ -1,3 +1,4 @@
+import { LoopDiagram } from "@/components/LoopDiagram";
 import { PageHeader } from "@/components/PageHeader";
 import { Label } from "@/components/ui";
 
@@ -5,14 +6,6 @@ const CHEAP_VS_REAL: [string, string, string][] = [
   ["Memory", "a vector store of past prompts", "structured knowledge — constraints, capabilities, plan shapes — read before acting to change decisions"],
   ["Synthesis", "a lookup table of API endpoints", "reason → typed contract → schema-validate → test → register (probationary → trusted)"],
   ["Learning", "“we added more examples”", "a measurable behaviour change, proven with a negative control"],
-];
-
-const PIPELINE = [
-  ["Plan", "decompose the instruction; reuse a learned plan shape or rewrite it from learned rules"],
-  ["Synthesize", "fill any capability gap at runtime — build it, validate against the live schema, test it"],
-  ["Execute", "run the steps; cached ids skip probes, enum facts pre-validate, permissions switch tooling"],
-  ["Validate", "score confidence; on a failed step after side effects, compensate (reversible) or flag (irreversible)"],
-  ["Learn", "extract constraints, update stats, promote capabilities — so the next run differs"],
 ];
 
 export default function AboutPage() {
@@ -50,17 +43,7 @@ export default function AboutPage() {
 
       <section className="panel mb-5 p-6">
         <Label className="mb-4">the loop · a LangGraph state machine</Label>
-        <ol className="flex flex-col gap-3">
-          {PIPELINE.map(([stage, desc], i) => (
-            <li key={stage} className="flex gap-4">
-              <span className="nums mt-0.5 font-mono text-2xs text-iris">{String(i + 1).padStart(2, "0")}</span>
-              <div>
-                <div className="text-sm font-medium text-text">{stage}</div>
-                <div className="mt-0.5 text-2xs leading-relaxed text-faint">{desc}</div>
-              </div>
-            </li>
-          ))}
-        </ol>
+        <LoopDiagram />
       </section>
 
       <div className="grid gap-5 sm:grid-cols-2">
