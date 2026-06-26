@@ -8,7 +8,8 @@ name: Deploy backend (Render)
 on:
   workflow_dispatch:
   push:
-    branches: ["main"]
+    branches:
+      - main
     paths:
       - "praxis/**"
       - "requirements.txt"
@@ -19,66 +20,57 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: render-deploy
-  cancel-in-progress: false
-
 jobs:
   deploy:
     name: Trigger Render deploy
     runs-on: ubuntu-latest
-    env:
-      RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
-      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
-      RENDER_SERVICE_NAME: ${{ vars.RENDER_SERVICE_NAME || 'praxis-api' }}
     steps:
       - name: Deploy
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
         run: |
           set -euo pipefail
+          SERVICE_NAME="${RENDER_SERVICE_NAME:-praxis-api}"
 
           if [ -n "${RENDER_DEPLOY_HOOK:-}" ]; then
-            echo "Triggering deploy via deploy hook…"
-            curl -fsS -X POST "$RENDER_DEPLOY_HOOK" && echo "✓ deploy hook accepted"
+            echo "Triggering deploy via deploy hook..."
+            curl -fsS -X POST "$RENDER_DEPLOY_HOOK" && echo "deploy hook accepted"
             exit 0
           fi
 
           if [ -z "${RENDER_API_KEY:-}" ]; then
-            echo "::warning::No RENDER_DEPLOY_HOOK or RENDER_API_KEY secret set — nothing to deploy."
-            echo "Add one in Settings → Secrets and variables → Actions, then re-run."
+            echo "::warning::No RENDER_DEPLOY_HOOK or RENDER_API_KEY secret set - nothing to deploy."
+            echo "Add one in Settings > Secrets and variables > Actions, then re-run."
             exit 0
           fi
 
-          auth="Authorization: Bearer $RENDER_API_KEY"
-
-          sid="${RENDER_SERVICE_ID:-}"
-          if [ -z "$sid" ]; then
-            echo "Looking up service '$RENDER_SERVICE_NAME'…"
-            sid=$(curl -fsS -H "$auth" "https://api.render.com/v1/services?limit=100" \
-              | python3 -c "
-import sys, json, os
-name = os.environ['RENDER_SERVICE_NAME']
-items = json.load(sys.stdin)
-def svc(i): return i.get('service', i)
-# Prefer an exact name match, else a service whose URL contains the name.
+          AUTH="Authorization: Bearer $RENDER_API_KEY"
+          SID="${RENDER_SERVICE_ID:-}"
+          if [ -z "$SID" ]; then
+            echo "Looking up service '$SERVICE_NAME'..."
+            SID=$(curl -fsS -H "$AUTH" "https://api.render.com/v1/services?limit=100" \
+              | SERVICE_NAME="$SERVICE_NAME" python3 -c 'import sys,json,os
+name=os.environ["SERVICE_NAME"]
+items=json.load(sys.stdin)
+def svc(i): return i.get("service", i)
+sid=""
 for i in items:
-    s = svc(i)
-    if s.get('name') == name:
-        print(s['id']); break
-else:
+    if svc(i).get("name")==name: sid=svc(i)["id"]; break
+if not sid:
     for i in items:
-        s = svc(i); d = s.get('serviceDetails', {}) or {}
-        if name in (d.get('url') or ''):
-            print(s['id']); break
-")
+        d=svc(i).get("serviceDetails",{}) or {}
+        if name in (d.get("url") or ""): sid=svc(i)["id"]; break
+print(sid)')
           fi
 
-          if [ -z "$sid" ]; then
-            echo "::error::Could not resolve a Render service id. Set RENDER_SERVICE_ID secret."
+          if [ -z "$SID" ]; then
+            echo "::error::Could not resolve a Render service id. Set the RENDER_SERVICE_ID secret."
             exit 1
           fi
-          echo "Deploying service $sid…"
-          resp=$(curl -fsS -X POST -H "$auth" -H "Content-Type: application/json" \
-            "https://api.render.com/v1/services/$sid/deploys" -d '{"clearCache":"do_not_clear"}')
-          did=$(echo "$resp" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))")
-          echo "✓ deploy queued: ${did:-unknown} (service $sid)"
+
+          echo "Deploying service $SID..."
+          RESP=$(curl -fsS -X POST -H "$AUTH" -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/$SID/deploys" -d '{"clearCache":"do_not_clear"}')
+          echo "$RESP" | python3 -c 'import sys,json;print("deploy queued:", json.load(sys.stdin).get("id","?"))'
