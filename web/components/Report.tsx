@@ -90,15 +90,19 @@ function Outputs({ steps }: { steps: StepReport[] }) {
   // What a run produced or returned — so "success" is something you can open and
   // read. A created document renders its content; a created/changed entity gets a
   // deep link; a read/query renders the entities it returned, each linkable.
+  // Tolerate reports from any backend version: these fields may be absent on an
+  // older API, so never assume the array exists.
+  const itemsOf = (s: StepReport) => s.result_items ?? [];
   const artifacts = steps.filter(
-    (s) => s.result_url || s.result_detail || s.result_items.length > 0,
+    (s) => s.result_url || s.result_detail || itemsOf(s).length > 0,
   );
   if (artifacts.length === 0) return null;
   return (
     <Section title="Outputs · what the run produced">
       <div className="flex flex-col gap-4">
         {artifacts.map((s) => {
-          const isCollection = !s.result_detail && s.result_items.length > 0;
+          const items = itemsOf(s);
+          const isCollection = !s.result_detail && items.length > 0;
           return (
             <article
               key={s.index}
@@ -113,7 +117,7 @@ function Outputs({ steps }: { steps: StepReport[] }) {
                 </span>
                 {isCollection && (
                   <span className="rounded-full border border-line-soft px-1.5 py-0.5 font-mono text-2xs text-faint">
-                    {s.result_items.length}
+                    {items.length}
                   </span>
                 )}
                 {s.capability && <span className="font-mono text-2xs text-faint">{s.capability}</span>}
@@ -134,7 +138,7 @@ function Outputs({ steps }: { steps: StepReport[] }) {
                 </div>
               ) : isCollection ? (
                 <ul className="divide-y divide-line-soft">
-                  {s.result_items.map((it, j) => (
+                  {items.map((it, j) => (
                     <li key={j} className="flex items-center gap-3 px-4 py-2.5">
                       {it.label && (
                         <span className="shrink-0 font-mono text-2xs text-iris">{it.label}</span>

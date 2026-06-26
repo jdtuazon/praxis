@@ -32,9 +32,9 @@ export interface StepReport {
   api_calls: number;
   wasted_calls: number;
   result_summary: string | null;
-  result_url: string | null;
-  result_detail: string | null;
-  result_items: ResultItem[];
+  result_url?: string | null;
+  result_detail?: string | null;
+  result_items?: ResultItem[];
   error: string | null;
   rolled_back: boolean;
   prevalidated: boolean;
