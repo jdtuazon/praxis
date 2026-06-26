@@ -1,5 +1,5 @@
 import type { ExecutionReport, StepReport, SynthesisResult } from "@/lib/types";
-import { Markdown } from "./Markdown";
+import { Markdown, PriorityTag } from "./Markdown";
 import { Bar, Delta, Label, Pill, Section, STATUS_TONE, Tile } from "./ui";
 
 const STEP_GLYPH: Record<string, string> = {
@@ -87,41 +87,79 @@ function titleOf(s: StepReport): string {
 }
 
 function Outputs({ steps }: { steps: StepReport[] }) {
-  // The concrete artifacts a run produced — so "success" is something you can
-  // open and read, not just a status. Any entity the agent created or changed
-  // carries a deep link; documents additionally render their content.
-  const artifacts = steps.filter((s) => s.result_url);
+  // What a run produced or returned — so "success" is something you can open and
+  // read. A created document renders its content; a created/changed entity gets a
+  // deep link; a read/query renders the entities it returned, each linkable.
+  const artifacts = steps.filter(
+    (s) => s.result_url || s.result_detail || s.result_items.length > 0,
+  );
   if (artifacts.length === 0) return null;
   return (
     <Section title="Outputs · what the run produced">
       <div className="flex flex-col gap-4">
-        {artifacts.map((s) => (
-          <article
-            key={s.index}
-            className="overflow-hidden rounded-md border border-line-soft bg-surface-2"
-          >
-            <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-soft px-4 py-3">
-              <span className="flex h-5 w-5 items-center justify-center rounded-sm bg-iris/10 text-2xs text-iris" aria-hidden>
-                ▦
-              </span>
-              <span className="text-sm font-medium text-text">{titleOf(s)}</span>
-              {s.capability && <span className="font-mono text-2xs text-faint">{s.capability}</span>}
-              <a
-                href={s.result_url!}
-                target="_blank"
-                rel="noreferrer"
-                className="link ml-auto text-2xs"
-              >
-                open in Linear ↗
-              </a>
-            </header>
-            {s.result_detail && (
-              <div className="max-h-96 overflow-auto px-5 py-4">
-                <Markdown source={s.result_detail} />
-              </div>
-            )}
-          </article>
-        ))}
+        {artifacts.map((s) => {
+          const isCollection = !s.result_detail && s.result_items.length > 0;
+          return (
+            <article
+              key={s.index}
+              className="overflow-hidden rounded-md border border-line-soft bg-surface-2"
+            >
+              <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-soft px-4 py-3">
+                <span className="flex h-5 w-5 items-center justify-center rounded-sm bg-iris/10 text-2xs text-iris" aria-hidden>
+                  {isCollection ? "≣" : "▦"}
+                </span>
+                <span className="text-sm font-medium text-text">
+                  {isCollection ? s.intent : titleOf(s)}
+                </span>
+                {isCollection && (
+                  <span className="rounded-full border border-line-soft px-1.5 py-0.5 font-mono text-2xs text-faint">
+                    {s.result_items.length}
+                  </span>
+                )}
+                {s.capability && <span className="font-mono text-2xs text-faint">{s.capability}</span>}
+                {s.result_url && (
+                  <a
+                    href={s.result_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="link ml-auto text-2xs"
+                  >
+                    open in Linear ↗
+                  </a>
+                )}
+              </header>
+              {s.result_detail ? (
+                <div className="max-h-96 overflow-auto px-5 py-4">
+                  <Markdown source={s.result_detail} />
+                </div>
+              ) : isCollection ? (
+                <ul className="divide-y divide-line-soft">
+                  {s.result_items.map((it, j) => (
+                    <li key={j} className="flex items-center gap-3 px-4 py-2.5">
+                      {it.label && (
+                        <span className="shrink-0 font-mono text-2xs text-iris">{it.label}</span>
+                      )}
+                      <span className="min-w-0 flex-1 truncate text-sm text-dim">
+                        {it.title || "—"}
+                      </span>
+                      {it.meta && <PriorityTag value={it.meta} />}
+                      {it.url && (
+                        <a
+                          href={it.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="link shrink-0 text-2xs"
+                        >
+                          open ↗
+                        </a>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </article>
+          );
+        })}
       </div>
     </Section>
   );

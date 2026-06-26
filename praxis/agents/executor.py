@@ -22,6 +22,7 @@ from ..models import (
     ConstraintKind,
     Decision,
     Plan,
+    ResultItem,
     StepReport,
     StepStatus,
     SynthesisResult,
@@ -79,27 +80,33 @@ def _result_url(result: Any) -> str | None:
 
 
 def _detail(result: Any) -> str | None:
-    """A fuller, human-readable body for a step's output: a created document's
-    markdown content, or a short preview of the entities a query gathered."""
+    """A document's markdown content, when a step produced one (rendered richly
+    by the console). Collections are surfaced structurally via ``_items`` instead."""
     if isinstance(result, dict):
         content = result.get("content")
         if isinstance(content, str) and content.strip():
             return content.strip()
-        return None
-    if isinstance(result, list) and result:
-        lines: list[str] = []
-        for item in result[:10]:
-            if isinstance(item, dict):
-                ident = item.get("identifier") or item.get("key") or ""
-                title = item.get("title") or item.get("name") or item.get("displayName") or ""
-                lines.append(f"{ident} {title}".strip() or str(item.get("id", ""))[:80])
-            else:
-                lines.append(str(item)[:80])
-        extra = len(result) - len(lines)
-        if extra > 0:
-            lines.append(f"… +{extra} more")
-        return "\n".join(filter(None, lines)) or None
     return None
+
+
+def _items(result: Any) -> list[ResultItem]:
+    """Structured rows for a read/query step, so a run that *answers* a question
+    (e.g. 'what are my current issues') shows the entities it returned, each
+    deep-linkable — not just 'N item(s)'."""
+    if not (isinstance(result, list) and result and all(isinstance(x, dict) for x in result)):
+        return []
+    items: list[ResultItem] = []
+    for it in result[:25]:
+        url = it.get("url")
+        items.append(
+            ResultItem(
+                label=str(it.get("identifier") or it.get("key") or it.get("id") or ""),
+                title=str(it.get("title") or it.get("name") or it.get("displayName") or ""),
+                meta=str(it.get("priorityLabel") or it.get("state") or it.get("status") or ""),
+                url=url if isinstance(url, str) and url.startswith("http") else None,
+            )
+        )
+    return items
 
 
 def derive_keywords(text: str) -> list[str]:
@@ -337,6 +344,7 @@ class Executor:
                 sr.result_summary = _summarize(result)
                 sr.result_url = _result_url(result)
                 sr.result_detail = _detail(result)
+                sr.result_items = _items(result)
                 if cap_name in RESOLVER_CAPS:
                     ctx.observe_failure(
                         {

@@ -15,6 +15,13 @@ export interface CallAttribution {
   detail: string;
 }
 
+export interface ResultItem {
+  label: string;
+  title: string;
+  meta: string;
+  url: string | null;
+}
+
 export interface StepReport {
   index: number;
   intent: string;
@@ -27,6 +34,7 @@ export interface StepReport {
   result_summary: string | null;
   result_url: string | null;
   result_detail: string | null;
+  result_items: ResultItem[];
   error: string | null;
   rolled_back: boolean;
   prevalidated: boolean;

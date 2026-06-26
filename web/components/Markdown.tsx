@@ -26,6 +26,15 @@ const DOT_TONE: Record<string, string> = {
   none: "bg-faint",
 };
 
+export function PriorityTag({ value }: { value: string }) {
+  const tone = PRIORITY_TONE[value.toLowerCase()] ?? "border-line bg-surface-2 text-dim";
+  return (
+    <span className={`inline-block rounded-full border px-2 py-0.5 font-mono text-2xs ${tone}`}>
+      {value}
+    </span>
+  );
+}
+
 function inline(text: string, k: string): ReactNode {
   const parts: ReactNode[] = [];
   const re = /(\*\*[^*]+\*\*|`[^`]+`)/g;
@@ -91,12 +100,9 @@ function Table({ rows, k }: { rows: string[]; k: string }) {
             <tr key={ri} className="align-top">
               {cells.map((c, ci) => {
                 if (ci === priorityCol) {
-                  const tone = PRIORITY_TONE[c.toLowerCase()] ?? "border-line bg-surface-2 text-dim";
                   return (
                     <td key={ci} className="py-2 pr-5">
-                      <span className={`inline-block rounded-full border px-2 py-0.5 font-mono text-2xs ${tone}`}>
-                        {c}
-                      </span>
+                      <PriorityTag value={c} />
                     </td>
                   );
                 }

@@ -308,6 +308,16 @@ class AppliedEffect(BaseModel):
     compensation_error: str | None = None
 
 
+class ResultItem(BaseModel):
+    """One entity returned by a read/query step, surfaced so a run that *answers*
+    a question (not just mutates) shows the answer, each row deep-linkable."""
+
+    label: str = ""  # identifier / key, e.g. "ENG-3"
+    title: str = ""
+    meta: str = ""  # a secondary tag, e.g. priority label or workflow state
+    url: str | None = None
+
+
 class StepReport(BaseModel):
     index: int
     intent: str
@@ -324,6 +334,7 @@ class StepReport(BaseModel):
     # preview of the issues a query gathered).
     result_url: str | None = None
     result_detail: str | None = None
+    result_items: list[ResultItem] = Field(default_factory=list)
     error: str | None = None
     rolled_back: bool = False
     prevalidated: bool = False
