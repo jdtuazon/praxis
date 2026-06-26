@@ -70,6 +70,38 @@ def _summarize(result: Any) -> str:
     return str(result)[:60]
 
 
+def _result_url(result: Any) -> str | None:
+    """A deep-link to the entity a step produced, when the platform returns one."""
+    if isinstance(result, dict):
+        url = result.get("url")
+        return url if isinstance(url, str) and url.startswith("http") else None
+    return None
+
+
+def _detail(result: Any) -> str | None:
+    """A fuller, human-readable body for a step's output: a created document's
+    markdown content, or a short preview of the entities a query gathered."""
+    if isinstance(result, dict):
+        content = result.get("content")
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+        return None
+    if isinstance(result, list) and result:
+        lines: list[str] = []
+        for item in result[:10]:
+            if isinstance(item, dict):
+                ident = item.get("identifier") or item.get("key") or ""
+                title = item.get("title") or item.get("name") or item.get("displayName") or ""
+                lines.append(f"{ident} {title}".strip() or str(item.get("id", ""))[:80])
+            else:
+                lines.append(str(item)[:80])
+        extra = len(result) - len(lines)
+        if extra > 0:
+            lines.append(f"… +{extra} more")
+        return "\n".join(filter(None, lines)) or None
+    return None
+
+
 def derive_keywords(text: str) -> list[str]:
     return [t for t in dict.fromkeys(tokenize(text)) if t not in _STOPWORDS and len(t) > 2][:8]
 
@@ -303,6 +335,8 @@ class Executor:
                 ctx.vars[f"step{step.index}"] = result
                 sr.status = StepStatus.SUCCESS
                 sr.result_summary = _summarize(result)
+                sr.result_url = _result_url(result)
+                sr.result_detail = _detail(result)
                 if cap_name in RESOLVER_CAPS:
                     ctx.observe_failure(
                         {

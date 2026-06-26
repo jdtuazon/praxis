@@ -1,4 +1,5 @@
 import type { ExecutionReport, StepReport, SynthesisResult } from "@/lib/types";
+import { Markdown } from "./Markdown";
 import { Bar, Delta, Label, Pill, Section, STATUS_TONE, Tile } from "./ui";
 
 const STEP_GLYPH: Record<string, string> = {
@@ -30,6 +31,7 @@ export function Report({ report }: { report: ExecutionReport }) {
   return (
     <div className="flex flex-col gap-5">
       <StatusHeader report={report} />
+      <Outputs steps={report.steps} />
       <StepTimeline steps={report.steps} />
       {report.synthesis.length > 0 && <SynthesisTrace results={report.synthesis} />}
       {report.decisions.length > 0 && <Decisions report={report} />}
@@ -78,6 +80,53 @@ function StatusHeader({ report }: { report: ExecutionReport }) {
   );
 }
 
+function titleOf(s: StepReport): string {
+  // "title=Issue digest by priority" / "identifier=ENG-3" → the human part.
+  const m = /^[a-z_]+=(.*)$/i.exec(s.result_summary ?? "");
+  return (m ? m[1] : s.result_summary) || s.intent;
+}
+
+function Outputs({ steps }: { steps: StepReport[] }) {
+  // The concrete artifacts a run produced — so "success" is something you can
+  // open and read, not just a status. Any entity the agent created or changed
+  // carries a deep link; documents additionally render their content.
+  const artifacts = steps.filter((s) => s.result_url);
+  if (artifacts.length === 0) return null;
+  return (
+    <Section title="Outputs · what the run produced">
+      <div className="flex flex-col gap-4">
+        {artifacts.map((s) => (
+          <article
+            key={s.index}
+            className="overflow-hidden rounded-md border border-line-soft bg-surface-2"
+          >
+            <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line-soft px-4 py-3">
+              <span className="flex h-5 w-5 items-center justify-center rounded-sm bg-iris/10 text-2xs text-iris" aria-hidden>
+                ▦
+              </span>
+              <span className="text-sm font-medium text-text">{titleOf(s)}</span>
+              {s.capability && <span className="font-mono text-2xs text-faint">{s.capability}</span>}
+              <a
+                href={s.result_url!}
+                target="_blank"
+                rel="noreferrer"
+                className="link ml-auto text-2xs"
+              >
+                open in Linear ↗
+              </a>
+            </header>
+            {s.result_detail && (
+              <div className="max-h-96 overflow-auto px-5 py-4">
+                <Markdown source={s.result_detail} />
+              </div>
+            )}
+          </article>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
 function StepTimeline({ steps }: { steps: StepReport[] }) {
   return (
     <Section title="Execution · plan steps">
@@ -112,6 +161,16 @@ function StepTimeline({ steps }: { steps: StepReport[] }) {
                 {(s.result_summary || s.error) && (
                   <div className={`mt-1 text-2xs ${s.error ? "text-bad/90" : "text-faint"}`}>
                     {s.error || s.result_summary}
+                    {s.result_url && (
+                      <a
+                        href={s.result_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="link ml-2"
+                      >
+                        ↗ open
+                      </a>
+                    )}
                   </div>
                 )}
                 {s.provenance.length > 0 && (

@@ -318,6 +318,12 @@ class StepReport(BaseModel):
     api_calls: int = 0
     wasted_calls: int = 0
     result_summary: str | None = None
+    # The concrete artifact this step produced, so a run is visible, not just
+    # "success": a deep-link to the created/affected entity (a real Linear URL)
+    # and a fuller detail body (e.g. the created document's markdown content, or a
+    # preview of the issues a query gathered).
+    result_url: str | None = None
+    result_detail: str | None = None
     error: str | None = None
     rolled_back: bool = False
     prevalidated: bool = False

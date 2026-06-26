@@ -25,6 +25,8 @@ export interface StepReport {
   api_calls: number;
   wasted_calls: number;
   result_summary: string | null;
+  result_url: string | null;
+  result_detail: string | null;
   error: string | null;
   rolled_back: boolean;
   prevalidated: boolean;

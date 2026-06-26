@@ -373,7 +373,7 @@ def create_document(
         teams = list_teams(ctx)
         if teams:
             inp["teamId"] = teams[0]["id"]
-    q = "mutation($input: DocumentCreateInput!){ documentCreate(input:$input){ success document { id title url } } }"
+    q = "mutation($input: DocumentCreateInput!){ documentCreate(input:$input){ success document { id title url content } } }"
     res = ctx.client.execute(q, {"input": inp})
     ctx.record_effect(
         AppliedEffect(
