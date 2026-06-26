@@ -165,14 +165,55 @@ def list_workflow_states(ctx: ExecutionContext, *, teamId: str, **_) -> list:
     return [s for s in nodes if (s.get("team") or {}).get("id") == teamId]
 
 
+def _team_from_context(ctx: ExecutionContext) -> str | None:
+    """Best-effort: recover a teamId from an already-resolved entity in run context.
+
+    A transition plan resolves the target issue before the workflow state, and every
+    resolved issue carries ``team { id }``. If the planner omitted teamId (or it bound
+    to None), we recover it here rather than hard-failing the transition."""
+
+    def walk(v: Any) -> str | None:
+        if isinstance(v, dict):
+            team = v.get("team")
+            if isinstance(team, dict) and team.get("id"):
+                return team["id"]
+            for x in v.values():
+                r = walk(x)
+                if r:
+                    return r
+        elif isinstance(v, list):
+            for x in v:
+                r = walk(x)
+                if r:
+                    return r
+        return None
+
+    return walk(getattr(ctx, "vars", {}) or {})
+
+
 def find_workflow_state(
     ctx: ExecutionContext,
     *,
-    teamId: str,
+    teamId: str | None = None,
     name: str | None = None,
     type: str | None = None,
     **_,
 ) -> dict:
+    # The planner is expected to pass the target issue's teamId. If it didn't, recover
+    # one from run context (a resolved issue's team), or fall back to the sole team in a
+    # single-team workspace, before giving up — so a transition never fails purely
+    # because the planner forgot to thread the team through.
+    if not teamId:
+        teamId = _team_from_context(ctx)
+    if not teamId:
+        teams = list_teams(ctx)
+        if len(teams) == 1:
+            teamId = teams[0]["id"]
+    if not teamId:
+        raise PlatformError(
+            "find_workflow_state requires a teamId and none could be inferred from context",
+            code="INVALID_INPUT",
+        )
     states = list_workflow_states(ctx, teamId=teamId)
     if name:
         for s in states:
